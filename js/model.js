@@ -83,9 +83,15 @@ export class Store extends EventTarget {
         try {
           this.backend.ensureUser(user).catch(e => console.warn('ensureUser', e)); // 最後に開いた日時の記録は待たない
           const fresh = this.fetchLists();
-          const saved = this.readBoot();
+          let saved = this.readBoot(), from = '端末';
+          if (!saved && this.backend.listsFromCache) {
+            // 控えが無ければ Firestore の端末キャッシュを使う（前に開いたことがある端末なら入っている）
+            saved = await this.backend.listsFromCache(user.uid).catch(() => null); from = '端末（Firestore）';
+            if (saved && (!saved.shared.length || !saved.profiles.length)) saved = null;
+            if (saved) saved.isAdmin = localStorage.getItem(`ed-admin:${user.uid}`) === '1';
+          }
           if (saved) {
-            this.applyLists(saved); T.lists = now(); T.listsFrom = '端末';
+            this.applyLists(saved); T.lists = now(); T.listsFrom = from;
             fresh.then(lists => this.refreshFromServer(lists)).catch(e => this.onListError(e));
           } else {
             this.applyLists(await fresh); T.lists = now(); T.listsFrom = 'サーバー';
@@ -108,11 +114,16 @@ export class Store extends EventTarget {
   }
   /** サーバーから、管理者かどうか・教材の一覧・学習者の一覧を並べて取る */
   async fetchLists() {
+    // どの問い合わせで待ったか分かるように、それぞれの時間を起動の記録に残す
+    const T = this.bootTiming, t0 = now(), part = {};
+    const timed = (name, p) => Promise.resolve(p).then(x => { part[name] = now() - t0; return x; });
     const [isAdmin, shared, own, profiles] = await Promise.all([
-      this.backend.checkAdmin?.() ?? false,
-      this.backend.listMaterials(),
-      this.backend.listOwnMaterials ? this.backend.listOwnMaterials(this.user.uid) : [],
-      this.backend.listProfiles(this.user.uid)]);
+      timed('管理者', this.backend.checkAdmin?.() ?? false),
+      timed('教材', this.backend.listMaterials()),
+      timed('自分の教材', this.backend.listOwnMaterials ? this.backend.listOwnMaterials(this.user.uid) : []),
+      timed('学習者', this.backend.listProfiles(this.user.uid))]);
+    if (T && !T.server) T.server = part;
+    try { localStorage.setItem(`ed-admin:${this.user.uid}`, isAdmin ? '1' : '0'); } catch (e) { /* なくてもよい */ }
     return { isAdmin, shared, own, profiles };
   }
   applyLists({ isAdmin, shared, own, profiles }) {

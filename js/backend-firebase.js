@@ -5,7 +5,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, writeBatch, query, orderBy, onSnapshot,
+  doc, getDoc, getDocs, getDocsFromCache, setDoc, updateDoc, deleteDoc, collection, writeBatch, query, orderBy, onSnapshot,
   serverTimestamp, increment,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { firebaseConfig } from "./config.js";
@@ -15,6 +15,8 @@ import { getCached, putCached, deleteCached } from "./matcache.js";
  * 新しい形 { i, json }（中身を JSON の文字列 1 つで持つ。Firestore の変換・端末保存がずっと軽い）と、前の形 { i, items } の両方を読む */
 const flatChunks = docs => docs.map(d => d.data()).sort((a, b) => a.i - b.i).flatMap(d => d.json != null ? JSON.parse(d.json) : d.items);
 const packChunk = (i, items) => ({ i, json: JSON.stringify(items) });
+const sortShared = docs => docs.map(d => d.data()).sort((a, b) => (a.order || 0) - (b.order || 0));
+const sortOwn = docs => docs.map(d => d.data()).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -54,9 +56,14 @@ export const backend = {
   },
 
   // ---- 教材 ----
-  async listMaterials() {
-    const snap = await getDocs(collection(db, 'materials'));
-    return snap.docs.map(d => d.data()).sort((a, b) => (a.order || 0) - (b.order || 0));
+  async listMaterials() { return sortShared((await getDocs(collection(db, 'materials'))).docs); },
+  /** 端末に一覧の控えが無いとき（新しい版にした直後など）に、Firestore の端末キャッシュから一覧を出す。サーバーは待たない */
+  async listsFromCache(uid) {
+    const [m, o, p] = await Promise.all([
+      getDocsFromCache(collection(db, 'materials')),
+      getDocsFromCache(collection(db, 'users', uid, 'materials')),
+      getDocsFromCache(query(collection(db, 'users', uid, 'profiles'), orderBy('createdAt')))]);
+    return { isAdmin: false, shared: sortShared(m.docs), own: sortOwn(o.docs), profiles: p.docs.map(d => ({ id: d.id, ...d.data() })) };
   },
   async loadChunks(materialId, kind, count, version) {
     // 端末の教材キャッシュ（IndexedDB）に同じ版があれば、通信も Firestore のキャッシュも使わない
@@ -147,10 +154,7 @@ export const backend = {
   },
 
   // ---- 自分の教材（アカウントごと） ----
-  async listOwnMaterials(uid) {
-    const snap = await getDocs(collection(db, 'users', uid, 'materials'));
-    return snap.docs.map(d => d.data()).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-  },
+  async listOwnMaterials(uid) { return sortOwn((await getDocs(collection(db, 'users', uid, 'materials'))).docs); },
   async loadOwnChunks(uid, materialId, count, version) {
     const key = `own:${uid}:${materialId}:cards`;
     const hit = await getCached(key, version);

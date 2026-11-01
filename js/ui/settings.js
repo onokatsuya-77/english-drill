@@ -52,5 +52,7 @@ function bootLine() {
   if (T.cards) parts.push(`教材 ${s(T.cards - T.lists)}`);
   if (T.states) parts.push(`学習記録 ${s(T.states - T.cards)}`);
   const c = T.cache && (T.cache.hit || T.cache.miss) ? ` ・教材の端末保存 ${T.cache.hit}/${T.cache.hit + T.cache.miss}` : '';
+  // 一覧をサーバーから待ったときは、問い合わせごとの時間も出す
+  if (T.listsFrom === 'サーバー' && T.server) parts[1] += `〔${Object.entries(T.server).map(([k, v]) => `${k} ${s(v)}`).join('・')}〕`;
   return h('p', { class: 'center small muted', style: { marginTop: '4px', lineHeight: 1.6 } }, `前回の起動 ${s(T.done)}秒：${parts.join(' / ')}${c}`);
 }
