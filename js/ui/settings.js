@@ -37,6 +37,20 @@ export function renderSettings(store, { go, isAdmin }) {
       h('div', { class: 'set-row' }, h('span', {}, 'ログイン中'), h('span', { style: { color: 'var(--ink2)', fontSize: '13px' } }, store.user.email)),
       h('button', { class: 'set-row', style: { color: 'var(--red)', cursor: 'pointer' }, onclick: () => store.backend.signOut() }, h('span', {}, 'ログアウト'), icon('logout', 20))),
     h('p', { class: 'center small muted', style: { marginTop: '20px' } }, `English Drill v${APP_VERSION}`),
+    bootLine(),
   );
   return main;
+}
+
+/** 前回の起動にかかった時間（どこで待っているかを見るため） */
+function bootLine() {
+  let T; try { T = JSON.parse(localStorage.getItem('ed-boot-timing') || 'null'); } catch (e) { T = null; }
+  if (!T?.done) return null;
+  const s = ms => (ms / 1000).toFixed(1);
+  const parts = [`開くまで ${s(T.auth)}`];
+  if (T.lists) parts.push(`一覧 ${s(T.lists - T.auth)}（${T.listsFrom}）`);
+  if (T.cards) parts.push(`教材 ${s(T.cards - T.lists)}`);
+  if (T.states) parts.push(`学習記録 ${s(T.states - T.cards)}`);
+  const c = T.cache && (T.cache.hit || T.cache.miss) ? ` ・教材の端末保存 ${T.cache.hit}/${T.cache.hit + T.cache.miss}` : '';
+  return h('p', { class: 'center small muted', style: { marginTop: '4px', lineHeight: 1.6 } }, `前回の起動 ${s(T.done)}秒：${parts.join(' / ')}${c}`);
 }

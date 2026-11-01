@@ -11,8 +11,10 @@ import {
 import { firebaseConfig } from "./config.js";
 import { getCached, putCached, deleteCached } from "./matcache.js";
 
-/** chunk 文書（{ i, items }）を番号順につないで 1 つの配列にする */
-const flatChunks = docs => docs.map(d => d.data()).sort((a, b) => a.i - b.i).flatMap(d => d.items);
+/** chunk 文書を番号順につないで 1 つの配列にする。
+ * 新しい形 { i, json }（中身を JSON の文字列 1 つで持つ。Firestore の変換・端末保存がずっと軽い）と、前の形 { i, items } の両方を読む */
+const flatChunks = docs => docs.map(d => d.data()).sort((a, b) => a.i - b.i).flatMap(d => d.json != null ? JSON.parse(d.json) : d.items);
+const packChunk = (i, items) => ({ i, json: JSON.stringify(items) });
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -28,6 +30,7 @@ const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: 'select_account' });
 
 export const backend = {
+  cacheStats: { hit: 0, miss: 0 }, // 教材キャッシュの当たり・外れ（起動の記録に出す）
   name: 'firebase',
 
   // ---- 認証 ----
@@ -38,7 +41,7 @@ export const backend = {
    */
   signIn() {
     return signInWithPopup(auth, provider).then(() => {}, e => {
-      if (e.code === 'auth/operation-not-supported-in-this-environment') return signInWithRedirect(auth, provider);
+      if (e.code === 'auth/operation-not-supported-in-this-environment') { sessionStorage.setItem('ed-redirect', '1'); return signInWithRedirect(auth, provider); }
       if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') return;
       if (e.code === 'auth/popup-blocked') throw new Error('ログインの画面が開けませんでした。もう一度「Google でログイン」を押してください。');
       throw e;
@@ -46,7 +49,7 @@ export const backend = {
   },
   async signOut() { await fbSignOut(auth); },
   onAuth(cb) {
-    getRedirectResult(auth).catch(e => console.warn('redirect result', e));
+    if (sessionStorage.getItem('ed-redirect')) { sessionStorage.removeItem('ed-redirect'); getRedirectResult(auth).catch(e => console.warn('redirect result', e)); }
     return onAuthStateChanged(auth, u => cb(u ? { uid: u.uid, email: u.email || '', name: u.displayName || '', photo: u.photoURL || '' } : null));
   },
 
@@ -59,7 +62,8 @@ export const backend = {
     // 端末の教材キャッシュ（IndexedDB）に同じ版があれば、通信も Firestore のキャッシュも使わない
     const key = `m:${materialId}:${kind}`;
     const hit = await getCached(key, version);
-    if (hit) return hit;
+    if (hit) { backend.cacheStats.hit++; return hit; }
+    backend.cacheStats.miss++;
     const s = await getDocs(collection(db, 'materials', materialId, kind));
     const out = flatChunks(s.docs);
     if (s.docs.length >= count && !s.metadata.fromCache) putCached(key, version, out);
@@ -83,7 +87,7 @@ export const backend = {
     const worker = async () => {
       while (next < jobs.length) {
         const [kind, i, items] = jobs[next++];
-        await setDoc(doc(col(kind), pad(i)), { i, items });
+        await setDoc(doc(col(kind), pad(i)), packChunk(i, items));
         onProgress?.(++done / total);
       }
     };
@@ -150,7 +154,8 @@ export const backend = {
   async loadOwnChunks(uid, materialId, count, version) {
     const key = `own:${uid}:${materialId}:cards`;
     const hit = await getCached(key, version);
-    if (hit) return hit;
+    if (hit) { backend.cacheStats.hit++; return hit; }
+    backend.cacheStats.miss++;
     const s = await getDocs(collection(db, 'users', uid, 'materials', materialId, 'cards'));
     const out = flatChunks(s.docs);
     if (s.docs.length >= count && !s.metadata.fromCache) putCached(key, version, out);
@@ -162,7 +167,7 @@ export const backend = {
     const old = await getDocs(col);
     let b = writeBatch(db), n = 0;
     for (const d of old.docs) { b.delete(d.ref); n++; }
-    cardChunks.forEach((items, i) => { b.set(doc(col, String(i).padStart(3, '0')), { i, items }); n++; });
+    cardChunks.forEach((items, i) => { b.set(doc(col, String(i).padStart(3, '0')), packChunk(i, items)); n++; });
     b.set(doc(db, 'users', uid, 'materials', material.id), { ...material, version, cardChunks: cardChunks.length, createdAt: material.createdAt || Date.now() });
     await b.commit();
     await putCached(`own:${uid}:${material.id}:cards`, version, cardChunks.flat());

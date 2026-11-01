@@ -100,3 +100,16 @@ assert.equal(noHead.cards.length, 2, '見出しが無くても 英語・意味 �
 }
 
 console.log('model tests passed', store.totals());
+
+// 2 回目の起動: 端末の控え（教材の一覧・学習者）ですぐ開き、サーバーの最新は後ろで取り直す
+{
+  store.saveBoot();
+  const s2 = new Store(backend); await s2.start();
+  for (let i = 0; i < 200 && !s2.ready; i++) await new Promise(r => setTimeout(r, 25));
+  assert.equal(s2.bootTiming.listsFrom, '端末');
+  assert.ok(s2.profile && s2.profile.id === store.profile.id, '前回の学習者で開く');
+  assert.equal(s2.materials.length, store.materials.length);
+  assert.equal(s2.cards.get('tg1900')?.length, 1900); assert.ok(s2.states.size > 0, '学習記録');
+  assert.ok(s2.bootTiming.done >= s2.bootTiming.auth);
+  console.log('second start: lists from', s2.bootTiming.listsFrom, 'ms', s2.bootTiming.done - s2.bootTiming.auth);
+}

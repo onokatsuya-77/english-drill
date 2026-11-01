@@ -39,6 +39,16 @@ export const MASTERY = [
 export const TRACK = '#E6E8F0';
 
 /** アプリ全体の状態。UI は 'change' イベントで再描画する。 */
+const now = () => Math.round(performance.now());
+/** 学習者の設定に既定値を補う（同じオブジェクトを直して返す） */
+function normalizeProfile(p) {
+  p.settings = { ...DEFAULT_SETTINGS, ...(p.settings || {}) };
+  p.settings.goals = { ...DEFAULT_SETTINGS.goals, ...(p.settings.goals || {}) };
+  p.settings.materials ||= {};
+  p.badges = normalizeBadges(p.badges);
+  return p;
+}
+
 export class Store extends EventTarget {
   constructor(backend) {
     super();
@@ -53,51 +63,102 @@ export class Store extends EventTarget {
     this.images = new Map(); // 挿絵 id → data URL
     this.imageKeys = new Set(); this.imageJobs = []; // 読み込みを始めた挿絵（教材@版）と、その読み込み
   }
-  emit() { this.dispatchEvent(new Event('change')); }
+  emit() {
+    this.dispatchEvent(new Event('change'));
+    // 起動を速くするための控え（教材の一覧・学習者・設定）を、少し待ってから端末に保存する
+    if (this.user && this.ready && !this.denied && !this.bootTimer) this.bootTimer = setTimeout(() => { this.bootTimer = null; this.saveBoot(); }, 1500);
+  }
 
+  // ---- 起動 ----
+  // 前回の一覧（教材・学習者・管理者かどうか）が端末にあれば、それですぐ画面を出し、サーバーの最新は後ろで取り直す。
+  // 教材の中身は端末の教材キャッシュ、学習記録は Firestore の端末キャッシュから先に出るので、通信を待たずに開ける。
   async start() {
     this.backend.onAuth(async user => {
       this.user = user; this.profiles = []; this.profile = null; this.ready = false; this.isAdmin = false; this.denied = false; this.error = '';
       this.unsubs.forEach(f => f()); this.unsubs = []; this.states = new Map(); this.days = []; this.cards = new Map(); this.cardIndex = new Map();
       if (user) {
+        const T = this.bootTiming = { auth: now() };
         this.loading = '読み込み中';
         this.emit();
         try {
-          // 最後に開いた日時の記録は待たない。管理者の確認・教材の一覧・学習者の一覧は並べて取る
-          this.backend.ensureUser(user).catch(e => console.warn('ensureUser', e));
-          const [isAdmin, , profiles] = await Promise.all([
-            this.backend.checkAdmin?.() ?? false, this.loadMaterialList(), this.backend.listProfiles(user.uid)]);
-          this.isAdmin = isAdmin; this.profiles = profiles;
+          this.backend.ensureUser(user).catch(e => console.warn('ensureUser', e)); // 最後に開いた日時の記録は待たない
+          const fresh = this.fetchLists();
+          const saved = this.readBoot();
+          if (saved) {
+            this.applyLists(saved); T.lists = now(); T.listsFrom = '端末';
+            fresh.then(lists => this.refreshFromServer(lists)).catch(e => this.onListError(e));
+          } else {
+            this.applyLists(await fresh); T.lists = now(); T.listsFrom = 'サーバー';
+          }
           const last = localStorage.getItem(`ed-profile:${user.uid}`);
           const p = this.profiles.find(x => x.id === last) || (this.profiles.length === 1 ? this.profiles[0] : null);
           if (p) await this.selectProfile(p.id);
-        } catch (e) {
-          console.error(e);
-          if (e.code === 'permission-denied') this.denied = true; else this.error = e.message;
-        }
+        } catch (e) { this.onListError(e); }
         this.loading = '';
+        T.done = now(); T.cache = { ...(this.backend.cacheStats || {}) };
+        try { localStorage.setItem('ed-boot-timing', JSON.stringify(T)); } catch (e) { /* 記録できなくてもよい */ }
       }
       this.ready = true; this.emit();
     });
   }
+  onListError(e) {
+    console.error(e);
+    if (e.code === 'permission-denied') { this.denied = true; this.profile = null; } else this.error = e.message;
+    this.emit();
+  }
+  /** サーバーから、管理者かどうか・教材の一覧・学習者の一覧を並べて取る */
+  async fetchLists() {
+    const [isAdmin, shared, own, profiles] = await Promise.all([
+      this.backend.checkAdmin?.() ?? false,
+      this.backend.listMaterials(),
+      this.backend.listOwnMaterials ? this.backend.listOwnMaterials(this.user.uid) : [],
+      this.backend.listProfiles(this.user.uid)]);
+    return { isAdmin, shared, own, profiles };
+  }
+  applyLists({ isAdmin, shared, own, profiles }) {
+    this.isAdmin = !!isAdmin;
+    this.materials = [...shared.map(m => ({ ...m, own: false })), ...own.map(m => ({ ...m, own: true }))];
+    this.profiles = profiles.map(normalizeProfile);
+  }
+  /** 端末の控えで開いたあと、サーバーの最新が届いたら差分だけ反映する */
+  async refreshFromServer(lists) {
+    const before = new Map(this.materials.map(m => [m.id, m.version]));
+    const enabledBefore = this.enabledMaterialIds().join();
+    const cur = this.profile?.id;
+    this.applyLists(lists);
+    if (cur) {
+      const p = this.profiles.find(x => x.id === cur);
+      if (p) { Object.assign(this.profile, p); this.profiles[this.profiles.indexOf(p)] = this.profile; }
+      else { this.unsubs.forEach(f => f()); this.unsubs = []; this.profile = null; }
+    }
+    this.dropChangedMaterials(before);
+    if (this.profile && (this.enabledMaterialIds().join() !== enabledBefore || this.enabledMaterials().some(m => !this.cards.has(m.id)))) await this.loadEnabledMaterials();
+    this.saveBoot(); this.emit();
+  }
+  readBoot() {
+    try { const s = JSON.parse(localStorage.getItem(`ed-boot:${this.user.uid}`) || 'null'); return s?.v === 1 ? s : null; } catch (e) { return null; }
+  }
+  saveBoot() {
+    if (!this.user || this.denied) return;
+    const strip = ({ own, ...m }) => m;
+    const data = { v: 1, isAdmin: this.isAdmin, shared: this.materials.filter(m => !m.own).map(strip), own: this.materials.filter(m => m.own).map(strip), profiles: this.profiles };
+    try { localStorage.setItem(`ed-boot:${this.user.uid}`, JSON.stringify(data)); } catch (e) { /* 入らなくてもよい */ }
+  }
 
   async loadMaterialList() {
-    const [shared, own] = await Promise.all([
-      this.backend.listMaterials(), this.backend.listOwnMaterials ? this.backend.listOwnMaterials(this.user.uid) : []]);
+    const { shared, own } = await this.fetchLists();
     this.materials = [...shared.map(m => ({ ...m, own: false })), ...own.map(m => ({ ...m, own: true }))];
   }
 
   async selectProfile(pid) {
     const p = this.profiles.find(x => x.id === pid); if (!p) return;
-    this.profile = p;
-    p.settings = { ...DEFAULT_SETTINGS, ...(p.settings || {}) };
-    p.settings.goals = { ...DEFAULT_SETTINGS.goals, ...(p.settings.goals || {}) };
-    p.settings.materials ||= {};
-    p.badges = normalizeBadges(p.badges);
+    this.profile = normalizeProfile(p);
     localStorage.setItem(`ed-profile:${this.user.uid}`, pid);
     this.unsubs.forEach(f => f()); this.unsubs = []; this.states = new Map(); this.days = [];
     this.loading = '学習記録を読み込み中'; this.emit();
+    const T = this.bootTiming || {};
     await this.loadEnabledMaterials();
+    T.cards = now();
     await new Promise(resolve => {
       let first = true;
       this.unsubs.push(this.backend.subscribeCardStates(this.user.uid, pid, (changes) => {
@@ -107,12 +168,13 @@ export class Store extends EventTarget {
       }));
       this.unsubs.push(this.backend.subscribeDays(this.user.uid, pid, days => { this.days = days.sort((a, b) => a.key < b.key ? -1 : 1); this.emit(); }));
     });
+    T.states = now();
     this.loading = ''; this.emit();
   }
 
   async createProfile(name) {
     const id = await this.backend.createProfile(this.user.uid, { name, settings: { ...DEFAULT_SETTINGS, materials: {} }, badges: [] });
-    this.profiles = await this.backend.listProfiles(this.user.uid);
+    this.profiles = (await this.backend.listProfiles(this.user.uid)).map(normalizeProfile);
     await this.selectProfile(id);
   }
   async saveSettings(patch) {
@@ -167,14 +229,18 @@ export class Store extends EventTarget {
   async refreshMaterials() {
     const before = new Map(this.materials.map(m => [m.id, m.version]));
     await this.loadMaterialList();
-    const now = new Map(this.materials.map(m => [m.id, m.version]));
+    this.dropChangedMaterials(before);
+    if (this.profile) await this.loadEnabledMaterials();
+    this.saveBoot(); this.emit();
+  }
+  /** 版が変わった・消えた教材の読み込み済みのカードを捨てる（次の loadEnabledMaterials で読み直す） */
+  dropChangedMaterials(before) {
+    const cur = new Map(this.materials.map(m => [m.id, m.version]));
     for (const [id, ver] of before) {
-      if (now.get(id) === ver) continue;
+      if (cur.get(id) === ver) continue;
       for (const c of this.cards.get(id) || []) this.cardIndex.delete(c.id);
       this.cards.delete(id); this.passages.delete(id);
     }
-    if (this.profile) await this.loadEnabledMaterials();
-    this.emit();
   }
 
   // ---- 今日の状況 ----

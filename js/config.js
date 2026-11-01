@@ -11,4 +11,4 @@ export const firebaseConfig = {
 // 管理者（教材を登録できる人）はコード（公開リポジトリ）に書かず、Firestore のルールだけで決める。
 // アプリは「管理者だけが読める config/admin を読めるか」で管理者かどうかを判断する。
 
-export const APP_VERSION = "0.3.2";
+export const APP_VERSION = "0.3.3";
