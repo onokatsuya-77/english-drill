@@ -87,7 +87,7 @@ assert.equal(noHead.cards.length, 2, '見出しが無くても 英語・意味 �
 {
   const tp = normalize(JSON.parse(fs.readFileSync(`${S}/tp/teppeki_S01-02.json`, 'utf8')));
   await backend.saveMaterial(tp.material, chunk(tp.cards), [], null, chunk(tp.images, 40));
-  await store.refreshMaterials();
+  await store.refreshMaterials(); await store.imagesLoaded();
   assert.ok(store.images.size >= 20, '挿絵が読み込まれる');
   await store.saveMatSettings('teppeki', { newPerDay: 50 });
   const all = store.newCandidates('teppeki', 50).length;

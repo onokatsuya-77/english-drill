@@ -5,10 +5,14 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  doc, getDoc, getDocs, getDocsFromCache, setDoc, updateDoc, deleteDoc, collection, writeBatch, query, orderBy, onSnapshot,
+  doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, writeBatch, query, orderBy, onSnapshot,
   serverTimestamp, increment,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { firebaseConfig } from "./config.js";
+import { getCached, putCached, deleteCached } from "./matcache.js";
+
+/** chunk 文書（{ i, items }）を番号順につないで 1 つの配列にする */
+const flatChunks = docs => docs.map(d => d.data()).sort((a, b) => a.i - b.i).flatMap(d => d.items);
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -52,41 +56,45 @@ export const backend = {
     return snap.docs.map(d => d.data()).sort((a, b) => (a.order || 0) - (b.order || 0));
   },
   async loadChunks(materialId, kind, count, version) {
-    // 端末のキャッシュにある版と同じなら通信しない
-    const col = collection(db, 'materials', materialId, kind);
-    const key = `chunkver:${materialId}:${kind}`;
-    let docs = [];
-    if (localStorage.getItem(key) === String(version)) {
-      try { const s = await getDocsFromCache(col); docs = s.docs; } catch (e) { docs = []; }
-    }
-    if (docs.length < count) {
-      const s = await getDocs(col); docs = s.docs;
-      localStorage.setItem(key, String(version));
-    }
-    const out = [];
-    docs.map(d => d.data()).sort((a, b) => a.i - b.i).forEach(d => out.push(...d.items));
+    // 端末の教材キャッシュ（IndexedDB）に同じ版があれば、通信も Firestore のキャッシュも使わない
+    const key = `m:${materialId}:${kind}`;
+    const hit = await getCached(key, version);
+    if (hit) return hit;
+    const s = await getDocs(collection(db, 'materials', materialId, kind));
+    const out = flatChunks(s.docs);
+    if (s.docs.length >= count && !s.metadata.fromCache) putCached(key, version, out);
     return out;
   },
   async saveMaterial(material, cardChunks, passageChunks, onProgress, imageChunks = []) {
     const version = Date.now();
     const total = cardChunks.length + passageChunks.length + imageChunks.length + 1; let done = 0;
-    // 既存の chunk を消す（数が減った場合に備えて）
-    for (const kind of ['cards', 'passages', 'images']) {
-      const s = await getDocs(collection(db, 'materials', material.id, kind));
-      let b = writeBatch(db), n = 0;
-      for (const d of s.docs) { b.delete(d.ref); if (++n === 400) { await b.commit(); b = writeBatch(db); n = 0; } }
-      if (n) await b.commit();
+    const col = kind => collection(db, 'materials', material.id, kind);
+    const pad = i => String(i).padStart(3, '0');
+    // 前の版より chunk の数が減ったときだけ、余った chunk を消す（前の版を読み込み直さない）
+    const prev = (await getDoc(doc(db, 'materials', material.id))).data() || {};
+    const surplus = [];
+    for (const [kind, n, old] of [['cards', cardChunks.length, prev.cardChunks], ['passages', passageChunks.length, prev.passageChunks], ['images', imageChunks.length, prev.imageChunks]]) {
+      for (let i = n; i < (old || 0); i++) surplus.push(doc(col(kind), pad(i)));
     }
-    const write = async (kind, chunks) => {
-      for (let i = 0; i < chunks.length; i++) {
-        await setDoc(doc(db, 'materials', material.id, kind, String(i).padStart(3, '0')), { i, items: chunks[i] });
+    if (surplus.length) { const b = writeBatch(db); surplus.forEach(r => b.delete(r)); await b.commit(); }
+    // 3 つずつ並べて書き込む
+    const jobs = [...cardChunks.map((c, i) => ['cards', i, c]), ...passageChunks.map((c, i) => ['passages', i, c]), ...imageChunks.map((c, i) => ['images', i, c])];
+    let next = 0;
+    const worker = async () => {
+      while (next < jobs.length) {
+        const [kind, i, items] = jobs[next++];
+        await setDoc(doc(col(kind), pad(i)), { i, items });
         onProgress?.(++done / total);
       }
     };
-    await write('cards', cardChunks);
-    await write('passages', passageChunks);
-    await write('images', imageChunks);
+    await Promise.all([worker(), worker(), worker()]);
     await setDoc(doc(db, 'materials', material.id), { ...material, version, cardChunks: cardChunks.length, passageChunks: passageChunks.length, imageChunks: imageChunks.length, updatedAt: serverTimestamp() });
+    // 登録した端末では、いま書いた中身をそのまま教材キャッシュに入れる（読み込み直さない）
+    await Promise.all([
+      putCached(`m:${material.id}:cards`, version, cardChunks.flat()),
+      passageChunks.length ? putCached(`m:${material.id}:passages`, version, passageChunks.flat()) : null,
+      imageChunks.length ? putCached(`m:${material.id}:images`, version, imageChunks.flat()) : null,
+    ]);
     onProgress?.(1);
     return version;
   },
@@ -140,15 +148,12 @@ export const backend = {
     return snap.docs.map(d => d.data()).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
   },
   async loadOwnChunks(uid, materialId, count, version) {
-    const col = collection(db, 'users', uid, 'materials', materialId, 'cards');
-    const key = `ownver:${uid}:${materialId}`;
-    let docs = [];
-    if (localStorage.getItem(key) === String(version)) {
-      try { const s = await getDocsFromCache(col); docs = s.docs; } catch (e) { docs = []; }
-    }
-    if (docs.length < count) { const s = await getDocs(col); docs = s.docs; localStorage.setItem(key, String(version)); }
-    const out = [];
-    docs.map(d => d.data()).sort((a, b) => a.i - b.i).forEach(d => out.push(...d.items));
+    const key = `own:${uid}:${materialId}:cards`;
+    const hit = await getCached(key, version);
+    if (hit) return hit;
+    const s = await getDocs(collection(db, 'users', uid, 'materials', materialId, 'cards'));
+    const out = flatChunks(s.docs);
+    if (s.docs.length >= count && !s.metadata.fromCache) putCached(key, version, out);
     return out;
   },
   async saveOwnMaterial(uid, material, cardChunks) {
@@ -160,6 +165,7 @@ export const backend = {
     cardChunks.forEach((items, i) => { b.set(doc(col, String(i).padStart(3, '0')), { i, items }); n++; });
     b.set(doc(db, 'users', uid, 'materials', material.id), { ...material, version, cardChunks: cardChunks.length, createdAt: material.createdAt || Date.now() });
     await b.commit();
+    await putCached(`own:${uid}:${material.id}:cards`, version, cardChunks.flat());
     return version;
   },
   async deleteOwnMaterial(uid, materialId) {
@@ -169,6 +175,7 @@ export const backend = {
     old.docs.forEach(d => b.delete(d.ref));
     b.delete(doc(db, 'users', uid, 'materials', materialId));
     await b.commit();
+    await deleteCached(`own:${uid}:${materialId}:`);
   },
   async saveBadges(uid, pid, badges) { await updateDoc(doc(db, 'users', uid, 'profiles', pid), { badges }); },
 };

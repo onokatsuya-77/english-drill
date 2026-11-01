@@ -51,6 +51,7 @@ export class Store extends EventTarget {
     this.loading = ''; this.ready = false; this.passages = new Map();
     this.isAdmin = false; this.denied = false;
     this.images = new Map(); // 挿絵 id → data URL
+    this.imageKeys = new Set(); this.imageJobs = []; // 読み込みを始めた挿絵（教材@版）と、その読み込み
   }
   emit() { this.dispatchEvent(new Event('change')); }
 
@@ -62,10 +63,11 @@ export class Store extends EventTarget {
         this.loading = '読み込み中';
         this.emit();
         try {
-          await this.backend.ensureUser(user);
-          this.isAdmin = await (this.backend.checkAdmin?.() ?? false);
-          await this.loadMaterialList();
-          this.profiles = await this.backend.listProfiles(user.uid);
+          // 最後に開いた日時の記録は待たない。管理者の確認・教材の一覧・学習者の一覧は並べて取る
+          this.backend.ensureUser(user).catch(e => console.warn('ensureUser', e));
+          const [isAdmin, , profiles] = await Promise.all([
+            this.backend.checkAdmin?.() ?? false, this.loadMaterialList(), this.backend.listProfiles(user.uid)]);
+          this.isAdmin = isAdmin; this.profiles = profiles;
           const last = localStorage.getItem(`ed-profile:${user.uid}`);
           const p = this.profiles.find(x => x.id === last) || (this.profiles.length === 1 ? this.profiles[0] : null);
           if (p) await this.selectProfile(p.id);
@@ -80,8 +82,8 @@ export class Store extends EventTarget {
   }
 
   async loadMaterialList() {
-    const shared = await this.backend.listMaterials();
-    const own = this.backend.listOwnMaterials ? await this.backend.listOwnMaterials(this.user.uid) : [];
+    const [shared, own] = await Promise.all([
+      this.backend.listMaterials(), this.backend.listOwnMaterials ? this.backend.listOwnMaterials(this.user.uid) : []]);
     this.materials = [...shared.map(m => ({ ...m, own: false })), ...own.map(m => ({ ...m, own: true }))];
   }
 
@@ -135,28 +137,42 @@ export class Store extends EventTarget {
   enabledMaterialIds() { return this.enabledMaterials().map(m => m.id); }
   material(mid) { return this.materials.find(m => m.id === mid) || null; }
 
+  /** 使う教材のカードを並べて読み込む。挿絵は待たずに後ろで読み込み、届いたら画面を描き直す */
   async loadEnabledMaterials() {
-    for (const m of this.enabledMaterials()) {
-      if (this.cards.has(m.id)) continue;
-      const cards = m.own
-        ? await this.backend.loadOwnChunks(this.user.uid, m.id, m.cardChunks, m.version)
-        : await this.backend.loadChunks(m.id, 'cards', m.cardChunks, m.version);
-      this.cards.set(m.id, cards); cards.forEach(c => this.cardIndex.set(c.id, c));
-      if (m.imageChunks && !m.own) {
-        try { (await this.backend.loadChunks(m.id, 'images', m.imageChunks, m.version)).forEach(x => this.images.set(x.id, x.src)); }
-        catch (e) { console.warn('images', e); }
-      }
+    const todo = this.enabledMaterials().filter(m => !this.cards.has(m.id));
+    let done = 0;
+    const tick = () => { if (this.loading && todo.length > 1) { this.loading = `教材を読み込み中（${++done}/${todo.length}）`; this.emit(); } };
+    const loaded = await Promise.all(todo.map(m => (m.own
+      ? this.backend.loadOwnChunks(this.user.uid, m.id, m.cardChunks, m.version)
+      : this.backend.loadChunks(m.id, 'cards', m.cardChunks, m.version)).then(x => { tick(); return x; })));
+    todo.forEach((m, k) => { this.cards.set(m.id, loaded[k]); loaded[k].forEach(c => this.cardIndex.set(c.id, c)); });
+    for (const m of todo) {
+      const key = `${m.id}@${m.version}`;
+      if (!m.imageChunks || m.own || this.imageKeys.has(key)) continue;
+      this.imageKeys.add(key);
+      this.imageJobs.push(this.backend.loadChunks(m.id, 'images', m.imageChunks, m.version)
+        .then(xs => { xs.forEach(x => this.images.set(x.id, x.src)); this.emit(); })
+        .catch(e => { console.warn('images', e); this.imageKeys.delete(key); }));
     }
   }
+  /** 後ろで読み込んでいる挿絵が届くまで待つ（テスト用） */
+  async imagesLoaded() { await Promise.all(this.imageJobs); }
   async loadPassages(materialId) {
     if (this.passages.has(materialId)) return this.passages.get(materialId);
     const m = this.material(materialId);
     const p = m?.passageChunks ? await this.backend.loadChunks(materialId, 'passages', m.passageChunks, m.version) : [];
     this.passages.set(materialId, p); return p;
   }
+  /** 教材の一覧を取り直す。版が変わった教材（登録し直した・消した教材）だけ読み込み直す */
   async refreshMaterials() {
+    const before = new Map(this.materials.map(m => [m.id, m.version]));
     await this.loadMaterialList();
-    this.cards.clear(); this.cardIndex.clear(); this.passages.clear();
+    const now = new Map(this.materials.map(m => [m.id, m.version]));
+    for (const [id, ver] of before) {
+      if (now.get(id) === ver) continue;
+      for (const c of this.cards.get(id) || []) this.cardIndex.delete(c.id);
+      this.cards.delete(id); this.passages.delete(id);
+    }
     if (this.profile) await this.loadEnabledMaterials();
     this.emit();
   }
