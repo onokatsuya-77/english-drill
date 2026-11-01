@@ -33,8 +33,12 @@ await goto('m/tg1900'); await shot('06_material_empty', true);
 await goto('study/tg1900/today'); await shot('07_card_front');
 await page.keyboard.press('Space'); await shot('08_card_back');
 let n = 0;
-while (n < 80 && !(await page.$('.result'))) {
-  if (await page.$('.rate')) await page.keyboard.press(String(n % 7 === 0 ? 1 : 3)); else await page.keyboard.press('Space');
+while (n < 120 && !(await page.$('.result'))) {
+  if (await page.$('.rate')) await page.keyboard.press(String(n % 7 === 0 ? 1 : 3));
+  else if (await page.$('.feedback')) await page.keyboard.press('Enter');
+  else if (await page.$('#spell') && !(await page.$eval('#spell', e => e.readOnly))) { await page.fill('#spell', 'x'); await page.keyboard.press('Enter'); }
+  else if (await page.$('.opt:not([disabled])')) await page.click('.opt:not([disabled]) >> nth=0');
+  else await page.keyboard.press('Enter');
   await page.waitForTimeout(80); n++;
 }
 console.log('card steps', n);
@@ -70,6 +74,18 @@ await shot('16_add_own', true);
 const own = await page.evaluate(() => window.store.materials.filter(m => m.own).map(m => [m.title, m.cardCount]));
 console.log('own materials', JSON.stringify(own));
 await goto(''); await shot('17_home_after', true);
+
+// ×で閉じたら「おつかれさま」を出さずに教材ページへ
+await goto(''); await goto('study/tg1900/deck/3');
+for (let i = 0; i < 2; i++) {
+  if (await page.$('.rate')) await page.keyboard.press('3');
+  else if (await page.$('#spell')) { await page.fill('#spell', 'x'); await page.keyboard.press('Enter'); await page.waitForTimeout(100); await page.keyboard.press('Enter'); }
+  else if (await page.$('.opt')) { await page.click('.opt >> nth=0'); await page.waitForTimeout(100); await page.keyboard.press('Enter'); }
+  else { await page.keyboard.press('Enter'); await page.waitForTimeout(100); await page.keyboard.press('3'); }
+  await page.waitForTimeout(150);
+}
+await page.click('[aria-label="学習をやめる"]'); await page.waitForTimeout(500);
+console.log('close →', await page.evaluate(() => location.hash), '| result:', !!(await page.$('.result')), '| toast:', await page.textContent('#toast').catch(() => ''));
 
 // 横幅の広い画面
 await page.setViewportSize({ width: 1200, height: 900 });

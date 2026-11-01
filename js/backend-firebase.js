@@ -2,7 +2,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import {
   getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut as fbSignOut,
-  setPersistence, browserLocalPersistence,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
@@ -28,16 +27,18 @@ export const backend = {
   name: 'firebase',
 
   // ---- 認証 ----
-  async signIn() {
-    await setPersistence(auth, browserLocalPersistence);
-    try {
-      await signInWithPopup(auth, provider);
-    } catch (e) {
-      // ポップアップが使えない環境（ホーム画面に追加した PWA など）はリダイレクトで
-      if (['auth/popup-blocked', 'auth/popup-closed-by-user', 'auth/operation-not-supported-in-this-environment', 'auth/cancelled-popup-request'].includes(e.code)) {
-        await signInWithRedirect(auth, provider);
-      } else throw e;
-    }
+  /**
+   * Google でログイン。Safari は「押した直後に開いたポップアップ」しか許さないので、await を挟まずにすぐ開く。
+   * （ページを移る方式は、Safari の追跡防止で github.io と firebaseapp.com の間のログイン結果を受け取れないため、
+   *   ポップアップが使えない環境のときだけ使う。ログイン状態は既定で端末に保存される）
+   */
+  signIn() {
+    return signInWithPopup(auth, provider).then(() => {}, e => {
+      if (e.code === 'auth/operation-not-supported-in-this-environment') return signInWithRedirect(auth, provider);
+      if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') return;
+      if (e.code === 'auth/popup-blocked') throw new Error('ログインの画面が開けませんでした。もう一度「Google でログイン」を押してください。');
+      throw e;
+    });
   },
   async signOut() { await fbSignOut(auth); },
   onAuth(cb) {

@@ -1,4 +1,4 @@
-import { h, clear } from '../dom.js';
+import { h, clear, toast } from '../dom.js';
 import { preview, formatInterval, Rating, State, emptyCard } from '../fsrs.js';
 import { posName } from '../content.js';
 import { pickMode, makeQuestion, checkSpelling, autoRating, cleanMeaning } from '../quiz.js';
@@ -262,6 +262,14 @@ export function renderStudy(store, { go, params }) {
   async function finish(early) {
     if (s.finished) return; s.finished = true;
     stopSpeaking();
+    if (early) {
+      // ×で閉じたときは「おつかれさま」を出さずに教材ページへ戻る（記録は答えるたびに保存済み）
+      const fresh = s.done ? await store.checkBadges() : [];
+      location.hash = `#/m/${mid}`;
+      if (fresh.length) toast(`新しいバッジ：${fresh.map(b => b.name).join('、')}`, 3500);
+      else if (s.done) toast(`${s.done}回答を記録しました`);
+      return;
+    }
     clear(main);
     main.className = 'result bare';
     const fresh = s.done ? await store.checkBadges() : [];

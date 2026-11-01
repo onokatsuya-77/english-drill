@@ -72,7 +72,7 @@ function renderLogin() {
       feat('grid', 'var(--orangeTint)', 'var(--orange)', 'カード・4択・つづり・穴埋め・リスニング'),
       feat('phone', 'var(--tealTint)', 'var(--teal)', 'スマホでもパソコンでも、電波がなくても')),
     h('div', { style: { marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' } },
-      h('button', { class: 'btn dark block', style: { height: '56px' }, onclick: async () => { try { await backend.signIn(); } catch (e) { alert('ログインできませんでした: ' + e.message); } } }, icon('logout', 20), 'Google でログイン'),
+      h('button', { class: 'btn dark block', style: { height: '56px' }, onclick: () => { backend.signIn().catch(e => alert('ログインできませんでした: ' + e.message)); } }, icon('logout', 20), 'Google でログイン'),
       store.error ? h('p', { class: 'small', style: { color: 'var(--red)', textAlign: 'center' } }, store.error) : null,
       h('p', { class: 'small muted center', style: { lineHeight: 1.6 } }, '家族として登録された Google アカウントで使えます。', h('br'), `v${APP_VERSION}${useMock ? '（テストモード）' : ''}`)));
 }
