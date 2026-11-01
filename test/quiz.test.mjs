@@ -50,6 +50,9 @@ for (const c of sj.slice(0, 200)) { const qz = applicableModes(c, sj).includes('
 
 // 形式の選び方
 assert.equal(pickMode(cmp, 'choice', true, tg), 'card', '新しい語はカードで覚える');
+assert.equal(pickMode(cmp, 'choice', true, tg, {}, Math.random, 'quiz'), 'choice', '設定で新しい語も4択に');
+assert.equal(pickMode(cmp, 'spell', true, tg, {}, Math.random, 'quiz') !== 'spell', true, '知らない語のつづりは出さない');
+for (let i = 0; i < 30; i++) assert.notEqual(pickMode(cmp, 'mix', true, tg, { speech: true }, Math.random, 'quiz'), 'card', 'ミックスでも新しい語をカードにしない');
 assert.equal(pickMode(cmp, 'spell', false, tg), 'spell');
 assert.equal(pickMode(sj[0], 'spell', false, sj), sj[0].front.includes(' ') ? 'choice' : 'spell', '熟語はつづりの代わりに4択');
 assert.equal(pickMode(cmp, 'listen', false, tg, { speech: false }), 'choice', '読み上げが無い端末では4択');

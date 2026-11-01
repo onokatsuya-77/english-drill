@@ -16,7 +16,7 @@ export function dayKey(t = Date.now()) {
 export function dayStart(t = Date.now()) { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); }
 
 export const DEFAULT_SETTINGS = { goals: { minutes: 30, answers: 100 }, materials: {} };
-export const DEFAULT_MAT = { enabled: true, newPerDay: 10, direction: 'en-ja', order: 'book', mode: 'card' };
+export const DEFAULT_MAT = { enabled: true, newPerDay: 10, direction: 'en-ja', order: 'book', mode: 'mix', newStyle: 'card' };
 export const MODES = [['card', 'カード'], ['choice', '4択'], ['spell', 'つづり'], ['cloze', '穴埋め'], ['listen', 'リスニング'], ['mix', 'ミックス']];
 
 /** 1 枚の覚え具合: new（未学習）/ shaky（あやしい）/ known（覚えた）/ solid（定着） */

@@ -49,7 +49,10 @@ export function renderMaterial(store, { go, params }) {
   main.append(h('section', { class: 'card' },
     h('h2', {}, '今日の学習'),
     h('div', { class: 'grid3' }, tile('復習', c.review), tile('新しい語', c.newLeft), tile('目安', c.total ? minutes : 0, '分')),
-    h('div', { class: 'field' }, h('span', { style: { fontSize: '13px', fontWeight: 600, color: 'var(--ink2)' } }, '出題形式'), modeChips),
+    h('div', { class: 'field' }, h('span', { style: { fontSize: '13px', fontWeight: 600, color: 'var(--ink2)' } }, '出題形式'), modeChips,
+      h('span', { class: 'small muted', style: { lineHeight: 1.6 } }, ms.mode === 'card' ? '答えを見て、覚えていたかを自分で評価します。'
+        : ms.newStyle === 'quiz' ? '初めて出る語も、この形式で出ます（つづりは4択になります）。'
+          : '初めて出る語は、まずカードで覚えます。同じ回の2回目から、この形式で出ます。')),
     c.total
       ? h('a', { class: 'btn primary block', href: `#/study/${mid}/today` }, '今日の学習を始める', icon('arrow', 20, 2.2))
       : h('div', { class: 'btn outline block', style: { cursor: 'default' } }, '今日の分はおわりました'),
@@ -110,6 +113,7 @@ export function renderMaterial(store, { go, params }) {
   main.append(h('div', { class: 'sec-h' }, h('h2', {}, 'この教材の設定')));
   main.append(h('div', { class: 'list' },
     setRow('1日の新しい語', ms.newPerDay, [0, 5, 10, 15, 20, 30, 50].map(n => [n, `${n}${unit}`]), val => store.saveMatSettings(mid, { newPerDay: Number(val) })),
+    setRow('新しい語の出し方', ms.newStyle, [['card', 'カードで覚えてから'], ['quiz', '最初から出題形式で']], val => store.saveMatSettings(mid, { newStyle: val })),
     setRow('出題の向き', ms.direction, [['en-ja', '英語 → 日本語'], ['ja-en', '日本語 → 英語']], val => store.saveMatSettings(mid, { direction: val })),
     setRow('新しい語の順番', ms.order, [['book', '本の順'], ['random', 'ランダム']], val => store.saveMatSettings(mid, { order: val })),
     h('button', { class: 'set-row', style: { color: 'var(--red)', cursor: 'pointer' }, onclick: async () => {

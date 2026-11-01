@@ -93,10 +93,16 @@ export function applicableModes(card, pool, { speech = false } = {}) {
   return modes;
 }
 
-/** 実際に出す形式を決める（新しい語は必ずカードで覚える） */
-export function pickMode(card, wanted, isNew, pool, opts = {}, rnd = Math.random) {
-  if (isNew) return 'card';
-  const ok = applicableModes(card, pool, opts);
+/**
+ * 実際に出す形式を決める。
+ * newStyle: 'card' … 初めて出る語はカードで覚えてから（2回目から選んだ形式）
+ *           'quiz' … 初めて出る語も選んだ形式で出す（つづりは知らない語には難しいので4択にする）
+ */
+export function pickMode(card, wanted, isNew, pool, opts = {}, rnd = Math.random, newStyle = 'card') {
+  if (isNew && newStyle !== 'quiz') return 'card';
+  let ok = applicableModes(card, pool, opts);
+  if (isNew) ok = ok.filter(m => m !== 'spell' && (wanted === 'card' || m !== 'card'));
+  if (!ok.length) return 'card';
   if (wanted === 'mix') return ok[Math.floor(rnd() * ok.length)];
   if (ok.includes(wanted)) return wanted;
   if (wanted !== 'card' && ok.includes('choice')) return 'choice';

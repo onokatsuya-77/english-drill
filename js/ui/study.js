@@ -44,7 +44,7 @@ export function renderStudy(store, { go, params }) {
     if (!card) { finish(false); return; }
     const isNew = !store.stateOf(card.id);
     if (isNew) s.newIds.add(card.id);
-    const mode = pickMode(card, ms.mode, isNew, pool, { speech: canSpeak });
+    const mode = pickMode(card, ms.mode, isNew, pool, { speech: canSpeak }, Math.random, ms.newStyle);
     const q = makeQuestion(card, mode, pool, { direction: dir });
     s.shownAt = Date.now();
     main.append(header(card, mode, isNew));
