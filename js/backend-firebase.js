@@ -127,8 +127,45 @@ export const backend = {
     const b = writeBatch(db);
     b.set(doc(db, ...base, 'cards', cardId), state);
     b.set(doc(collection(db, ...base, 'logs')), { cardId, ...log });
-    const inc = {}; for (const [k, v] of Object.entries(dayDelta)) inc[k] = increment(v);
-    b.set(doc(db, ...base, 'days', dayKey), { ...inc, date: dayKey }, { merge: true });
+    const toInc = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, v && typeof v === 'object' ? toInc(v) : increment(v)]));
+    b.set(doc(db, ...base, 'days', dayKey), { ...toInc(dayDelta), date: dayKey }, { merge: true });
+    await b.commit();
+  },
+
+  // ---- 自分の教材（アカウントごと） ----
+  async listOwnMaterials(uid) {
+    const snap = await getDocs(collection(db, 'users', uid, 'materials'));
+    return snap.docs.map(d => d.data()).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  },
+  async loadOwnChunks(uid, materialId, count, version) {
+    const col = collection(db, 'users', uid, 'materials', materialId, 'cards');
+    const key = `ownver:${uid}:${materialId}`;
+    let docs = [];
+    if (localStorage.getItem(key) === String(version)) {
+      try { const s = await getDocsFromCache(col); docs = s.docs; } catch (e) { docs = []; }
+    }
+    if (docs.length < count) { const s = await getDocs(col); docs = s.docs; localStorage.setItem(key, String(version)); }
+    const out = [];
+    docs.map(d => d.data()).sort((a, b) => a.i - b.i).forEach(d => out.push(...d.items));
+    return out;
+  },
+  async saveOwnMaterial(uid, material, cardChunks) {
+    const version = Date.now();
+    const col = collection(db, 'users', uid, 'materials', material.id, 'cards');
+    const old = await getDocs(col);
+    let b = writeBatch(db), n = 0;
+    for (const d of old.docs) { b.delete(d.ref); n++; }
+    cardChunks.forEach((items, i) => { b.set(doc(col, String(i).padStart(3, '0')), { i, items }); n++; });
+    b.set(doc(db, 'users', uid, 'materials', material.id), { ...material, version, cardChunks: cardChunks.length, createdAt: material.createdAt || Date.now() });
+    await b.commit();
+    return version;
+  },
+  async deleteOwnMaterial(uid, materialId) {
+    const col = collection(db, 'users', uid, 'materials', materialId, 'cards');
+    const old = await getDocs(col);
+    const b = writeBatch(db);
+    old.docs.forEach(d => b.delete(d.ref));
+    b.delete(doc(db, 'users', uid, 'materials', materialId));
     await b.commit();
   },
   async saveBadges(uid, pid, badges) { await updateDoc(doc(db, 'users', uid, 'profiles', pid), { badges }); },

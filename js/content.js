@@ -85,3 +85,65 @@ export function chunk(arr, size = CHUNK_SIZE) {
 }
 
 export const posName = p => POS_NAME[p] || p;
+
+// ---- 自分の教材（Excel・CSV・1語ずつ） ----
+export const OWN_PART = 50; // 自分の教材は 50 語ずつ Part に分ける
+
+/** CSV を行の配列に（"…" のくくり、改行入り、先頭の BOM に対応） */
+export function parseCSV(text) {
+  const rows = []; let row = [], cell = '', q = false;
+  const s = text.replace(/^﻿/, '');
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (q) {
+      if (ch === '"') { if (s[i + 1] === '"') { cell += '"'; i++; } else q = false; }
+      else cell += ch;
+    } else if (ch === '"') q = true;
+    else if (ch === ',' || ch === '\t') { row.push(cell); cell = ''; }
+    else if (ch === '\n' || ch === '\r') { if (ch === '\r' && s[i + 1] === '\n') i++; row.push(cell); rows.push(row); row = []; cell = ''; }
+    else cell += ch;
+  }
+  if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+  return rows.filter(r => r.some(c => String(c).trim() !== ''));
+}
+
+const COLS = {
+  front: /^(英語|英単語|単語|見出し語?|english|word|term|phrase)$/i,
+  meaning: /^(意味|日本語|訳|meaning|japanese|definition)$/i,
+  exEn: /^(例文|example|sentence)$/i,
+  exJa: /^(例文の?訳|例文和訳|和訳|example_?ja|translation)$/i,
+  pos: /^(品詞|pos|part of speech)$/i,
+  pron: /^(発音|発音記号|pron|ipa)$/i,
+};
+
+/** 表（1行目が見出し）から自分の教材をつくる。見出しが無ければ 英語・意味・例文・例文の訳 の順とみなす */
+export function ownFromRows(rows, { title, owner, id = null, createdAt = null }) {
+  if (!rows.length) throw new Error('行がありません');
+  const head = rows[0].map(c => String(c).trim());
+  const idx = {};
+  for (const [k, re] of Object.entries(COLS)) { const i = head.findIndex(c => re.test(c)); if (i >= 0) idx[k] = i; }
+  let body = rows;
+  if (idx.front != null && idx.meaning != null) body = rows.slice(1);
+  else { Object.assign(idx, { front: 0, meaning: 1, exEn: 2, exJa: 3 }); delete idx.pos; delete idx.pron; }
+  const mid = id || 'own-' + Date.now().toString(36);
+  const get = (r, k) => (idx[k] != null ? String(r[idx[k]] ?? '').trim() : '');
+  const cards = [];
+  for (const r of body) {
+    const front = get(r, 'front'), meaning = get(r, 'meaning');
+    if (!front || !meaning) continue;
+    const no = cards.length + 1, deckNo = Math.floor((no - 1) / OWN_PART) + 1;
+    const exEn = get(r, 'exEn'), exJa = get(r, 'exJa');
+    cards.push({
+      id: `${mid}-${no}`, m: mid, deck: `Part ${deckNo}`, deckNo, no,
+      front, pron: get(r, 'pron'), pos: get(r, 'pos'), flags: [], meaning, sub: [],
+      examples: exEn ? [{ en: exEn, ja: exJa }] : [], usage: [], colloc: [], derived: [], related: [], notes: [], refs: [], page: null, audio: null,
+    });
+  }
+  if (!cards.length) throw new Error('「英語」と「意味」が入った行が見つかりません');
+  const decks = [];
+  for (const c of cards) { let d = decks[decks.length - 1]; if (!d || d.no !== c.deckNo) { d = { id: `${mid}:${c.deckNo}`, no: c.deckNo, title: c.deck, count: 0 }; decks.push(d); } d.count++; }
+  const material = { id: mid, title: title || '自分の単語帳', kind: 'own', deckLabel: 'Part', decks, cardCount: cards.length, passageCount: 0, owner, createdAt: createdAt || Date.now() };
+  return { material, cards };
+}
+
+export const CSV_TEMPLATE = '﻿英語,意味,例文,例文の訳,品詞\r\nefficient,効率的な,This new pump is more efficient than the old one.,この新しいポンプは古いものより効率がいい。,形\r\npressure vessel,圧力容器,,,名\r\n';

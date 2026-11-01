@@ -117,9 +117,9 @@ export function formatInterval(ms) {
   const m = Math.round(ms / MIN);
   if (m < 60) return `${Math.max(1, m)}分`;
   const h = ms / (60 * MIN);
-  if (h < 24) return `${Math.round(h)}時間`;
+  if (h < 22) return `${Math.round(h)}時間`;
   const d = ms / DAY;
-  if (d < 30) return `${Math.round(d)}日`;
+  if (d < 30) return `${Math.max(1, Math.round(d))}日`;
   if (d < 365) return `${(d / 30).toFixed(1).replace(/\.0$/, '')}か月`;
   return `${(d / 365).toFixed(1).replace(/\.0$/, '')}年`;
 }

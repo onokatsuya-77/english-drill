@@ -1,43 +1,69 @@
-import { h, fmtMin, fmtNum } from '../dom.js';
-import { BADGES, earnedBadges } from '../model.js';
+import { h } from '../dom.js';
+import { rings, icon, coverEl, coverOf } from './parts.js';
 
+const WD = ['日', '月', '火', '水', '木', '金', '土'];
+
+/** ホーム（本棚）: 今日の目標リングと、教材ごとの今日の数 */
 export function renderHome(store, { go }) {
-  const q = store.queueCounts();
-  const t = store.today();
-  const total = q.due + q.learning + q.newLeft;
+  const main = h('main', {});
+  const now = new Date();
+  const p = store.profile;
+  const t = store.today(), g = store.goals();
+  const min = Math.round((t.studyMs || 0) / 60000);
+  const fr = [min / g.minutes, (t.reviews || 0) / g.answers, (t.newCards || 0) / g.newWords];
+  const left = store.totalCounts();
   const streak = store.streak();
-  const earned = earnedBadges(store);
-  const known = new Set(store.profile.badges || []);
-  const fresh = earned.filter(b => !known.has(b));
-  if (fresh.length) { store.profile.badges = earned; store.backend.saveBadges(store.user.uid, store.profile.id, earned).catch(() => {}); }
-  const main = h('main', {},
-    h('div', { class: 'card' },
-      h('h2', {}, '今日やること'),
-      h('div', { class: 'stats' },
-        stat(q.due, '復習'), stat(q.learning, '学習中'), stat(q.newLeft, '新しい単語')),
-      h('p', { class: 'center', style: { marginTop: '14px' } },
-        total ? h('button', { class: 'primary big', onclick: () => go('study') }, `学習を始める（${total} 枚）`)
-          : h('span', { class: 'muted' }, store.materials.length ? '今日の分は終わりました。お疲れさまでした。' : '教材がまだ登録されていません')),
-      q.newAvail === 0 && store.materials.length ? h('p', { class: 'muted small center' }, '新しい単語がありません。設定で教材を増やせます。') : null),
-    h('div', { class: 'card' },
-      h('h2', {}, '今日の記録'),
-      h('div', { class: 'stats' }, stat(fmtNum(t.reviews), '回答'), stat(fmtMin(t.studyMs || 0), '学習時間'), stat(`${streak}日`, '連続'))),
-    fresh.length ? h('div', { class: 'card' }, h('h2', {}, '🎉 新しいバッジ'), ...fresh.map(id => { const b = BADGES.find(x => x.id === id); return h('p', {}, `${b.icon} ${b.title} — ${b.desc}`); })) : null,
-    h('div', { class: 'card' },
-      h('h2', {}, '教材'),
-      ...store.materials.map(m => materialRow(store, m, go))),
+
+  main.append(
+    h('header', { class: 'top' },
+      h('div', { style: { display: 'flex', flexDirection: 'column', gap: '2px' } },
+        h('span', { class: 'date' }, `${now.getMonth() + 1}月${now.getDate()}日（${WD[now.getDay()]}）`),
+        h('span', { class: 'hello' }, `こんにちは、${p.name}さん`)),
+      h('a', { class: 'avatar', href: '#/profiles', 'aria-label': '学習者を切り替える' }, (p.name || '?').slice(0, 1))),
+    h('section', { class: 'today', 'aria-label': '今日の目標' },
+      h('div', { class: 'row', style: { gap: '18px' } },
+        rings(fr, 112, `今日の目標の達成度：学習時間${pc(fr[0])}、回答${pc(fr[1])}、新しい語${pc(fr[2])}`),
+        h('div', { class: 'stats' },
+          stat('学習時間', min, ` / ${g.minutes}分`, '#7C8CFF'),
+          stat('回答', t.reviews || 0, ` / ${g.answers}回`, '#F7A23B'),
+          stat('新しい語', t.newCards || 0, ` / ${g.newWords}語`, '#3CCFE0'))),
+      h('div', { class: 'foot' },
+        h('b', {}, icon('flame', 18), streak ? `${streak}日連続` : '今日から始めよう'),
+        h('span', {}, left.review + left.fresh ? `のこり 復習 ${left.review}・新規 ${left.fresh}` : '今日の分はおわり'))),
+    h('div', { class: 'row-between', style: { padding: '22px 20px 10px' } },
+      h('h2', { style: { fontSize: '17px', fontWeight: 700 } }, 'わたしの教材'),
+      h('a', { href: '#/add', class: 'row', style: { gap: '4px', fontSize: '14px', fontWeight: 600, minHeight: '44px' } }, icon('plus', 18, 2.2), '教材を追加')),
   );
+
+  const mats = store.enabledMaterials();
+  if (!mats.length) {
+    main.append(h('div', { class: 'empty' },
+      h('p', { class: 'muted' }, store.materials.length ? '教材がまだ選ばれていません。' : 'まだ教材がありません。'),
+      h('a', { class: 'btn primary', href: '#/add' }, '教材を追加する')));
+    return main;
+  }
+  const list = h('div', { class: 'mat-list' });
+  for (const m of mats) {
+    const c = store.counts(m.id), ms = store.mastery(m.id);
+    const started = ms.studied > 0;
+    const unit = m.kind === 'idioms' ? '項目' : '語';
+    list.append(h('a', { class: 'mat', href: `#/m/${m.id}` },
+      coverEl(m),
+      h('div', { class: 'grow', style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
+        h('span', { class: 'title' }, m.title),
+        h('span', { class: 'sub' }, started ? `習得 ${ms.learned} / ${ms.total}${unit}` : 'まだ始めていません'),
+        h('div', { class: 'bar' }, h('div', { style: { width: `${ms.total ? (ms.learned / ms.total) * 100 : 0}%`, background: coverOf(m).color } }))),
+      started || c.review
+        ? h('div', { class: 'num' }, h('b', {}, c.total), h('span', {}, [c.review ? `復習${c.review}` : '', c.newLeft ? `新規${c.newLeft}` : ''].filter(Boolean).join('・') || '今日はおわり'))
+        : h('span', { class: 'start' }, 'はじめる')));
+  }
+  main.append(list);
   return main;
 }
-const stat = (n, l) => h('div', {}, h('div', { class: 'n' }, n), h('div', { class: 'l' }, l));
 
-export function materialRow(store, m, go) {
-  const enabled = store.profile.settings.materials[m.id]?.enabled !== false;
-  if (!enabled) return h('div', { class: 'row', style: { padding: '6px 0' } }, h('span', { class: 'grow muted' }, m.title), h('span', { class: 'small muted' }, '休止中'));
-  const { counts } = store.progress(m.id);
-  const pct = k => (counts[k] / Math.max(1, counts.total) * 100) + '%';
-  return h('div', { style: { padding: '8px 0' } },
-    h('div', { class: 'row' }, h('span', { class: 'grow' }, m.title), h('span', { class: 'small muted' }, `${fmtNum(counts.mature)} / ${fmtNum(counts.total)} 定着`),
-      m.passageChunks ? h('a', { href: '#/read/' + m.id, class: 'small' }, '長文を読む') : null),
-    h('div', { class: 'bar' }, h('span', { class: 'c-mature', style: { width: pct('mature') } }), h('span', { class: 'c-young', style: { width: pct('young') } }), h('span', { class: 'c-learning', style: { width: pct('learning') } })));
+const pc = f => Math.round(Math.min(1, f) * 100) + '%';
+function stat(k, v, rest, color) {
+  return h('div', { style: { display: 'flex', flexDirection: 'column', gap: '1px' } },
+    h('span', { class: 'k' }, k),
+    h('span', { class: 'v', style: { color } }, String(v), h('small', {}, rest)));
 }

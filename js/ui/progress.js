@@ -1,48 +1,106 @@
-import { h, fmtMin, fmtNum } from '../dom.js';
-import { BADGES, earnedBadges, dayKey, dayStart } from '../model.js';
+import { h } from '../dom.js';
+import { miniRings, medal, masteryBar, masteryLegend, shortTitle } from './parts.js';
 
+const WD = ['日', '月', '火', '水', '木', '金', '土'];
+const HEAT = ['#E6E8F0', '#C9CEF7', '#9AA4F2', '#5C69E6', '#2B3A8F'];
+
+/** 記録: 今週のリング、連続日数と合計、4週間、教材ごとの覚え具合、バッジ */
 export function renderProgress(store) {
-  const tot = store.totals(); const streak = store.streak(); const earned = new Set(earnedBadges(store));
-  const main = h('main', {},
-    h('div', { class: 'card' }, h('h2', {}, '全体'),
-      h('div', { class: 'stats' },
-        st(fmtNum(tot.reviews), '回答の合計'), st(fmtMin(tot.studyMs), '学習時間'), st(`${streak}日`, '連続'),
-        st(fmtNum(tot.mature), '定着したカード'), st(fmtNum(tot.studiedDays), '学習した日数'), st(fmtNum(store.states.size), '学習したカード'))),
-    h('div', { class: 'card' }, h('h2', {}, '最近 4 週間の回答数'), chart(store)),
-    ...store.materials.filter(m => store.cards.has(m.id)).map(m => materialCard(store, m)),
-    h('div', { class: 'card' }, h('h2', {}, 'バッジ'),
-      h('div', { class: 'badges' }, ...BADGES.map(b => h('div', { class: 'badge' + (earned.has(b.id) ? '' : ' off'), title: b.desc }, h('div', { class: 'ic' }, b.icon), h('div', { class: 't' }, b.title))))),
-  );
+  const main = h('main', {});
+  const g = store.goals();
+  const t = store.totals();
+
+  // 今週（月曜はじまり）
+  const now = new Date();
+  const dow = (now.getDay() + 6) % 7; // 月=0
+  const week = store.recentDays(dow + 1);
+  while (week.length < 7) week.push(null);
+  const first = new Date(now); first.setDate(now.getDate() - dow);
+  const last = new Date(first); last.setDate(first.getDate() + 6);
+  main.append(
+    h('h1', { class: 'page-title' }, '記録'),
+    h('section', { class: 'card night', style: { padding: '16px', gap: '12px' } },
+      h('div', { class: 'row-between', style: { alignItems: 'baseline' } },
+        h('h2', { style: { fontSize: '15px' } }, '今週'),
+        h('span', { style: { fontSize: '12px', color: 'var(--nightInk)' } }, `${md(first)}〜${md(last)}`)),
+      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '4px' } },
+        ...week.map((d, i) => {
+          const name = WD[(i + 1) % 7];
+          const fr = d ? [(d.studyMs || 0) / 60000 / g.minutes, (d.reviews || 0) / g.answers, (d.newCards || 0) / g.newWords] : [0, 0, 0];
+          const isToday = i === dow;
+          return h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', opacity: d ? 1 : 0.45 } },
+            miniRings(fr, `${name}曜日：学習時間${pc(fr[0])}、回答${pc(fr[1])}、新しい語${pc(fr[2])}`),
+            h('span', { style: { fontSize: '12px', fontWeight: isToday ? 800 : 500, color: isToday ? '#fff' : 'var(--nightInk)' } }, name));
+        }))));
+
+  // 合計
+  main.append(h('div', { class: 'grid2', style: { margin: '14px 16px 0', gap: '10px' } },
+    statCard('連続', t.streak, '日', `最長 ${Math.max(t.longest, t.streak)}日`),
+    statCard('習得した語', t.learned, '', '定着＋覚えた'),
+    statCard('学習時間', null, null, 'はじめてから', hm(t.studyMs)),
+    statCard('回答', t.reviews.toLocaleString(), '', 'はじめてから')));
+
+  // 4週間（月曜はじまり）
+  const days = store.recentDays(21 + dow + 1);
+  const max = Math.max(1, ...days.map(d => d.studyMs || 0));
+  const lv = d => !d.reviews ? 0 : Math.min(4, 1 + Math.floor(((d.studyMs || 0) / max) * 3.999));
+  const cells = days.map(d => h('span', { style: { background: HEAT[lv(d)] }, title: `${d.key}：${Math.round((d.studyMs || 0) / 60000)}分・${d.reviews || 0}回答` }));
+  while (cells.length % 7) cells.push(h('span', { style: { background: 'transparent' } }));
+  main.append(h('section', { class: 'card', style: { gap: '10px' } },
+    h('h2', { style: { fontSize: '15px' } }, 'この4週間'),
+    h('div', { class: 'heat labels' }, ...['月', '火', '水', '木', '金', '土', '日'].map(x => h('span', {}, x))),
+    h('div', { class: 'heat', role: 'img', 'aria-label': `過去4週間の学習。学習した日 ${days.filter(d => d.reviews).length}日` }, ...cells),
+    h('div', { class: 'row', style: { justifyContent: 'flex-end', gap: '4px', fontSize: '11px', color: 'var(--muted)' } },
+      '少ない', ...HEAT.map(c => h('span', { class: 'swatch', style: { width: '14px', height: '14px', borderRadius: '4px', background: c } })), '多い')));
+
+  // 教材ごとの覚え具合
+  const mats = store.enabledMaterials();
+  if (mats.length) {
+    main.append(h('section', { class: 'card', style: { padding: '16px' } },
+      h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } }, h('h2', { style: { fontSize: '15px' } }, '教材ごとの覚え具合'), masteryLegend(true)),
+      ...mats.map(m => {
+        const mm = store.mastery(m.id);
+        const unit = m.kind === 'idioms' ? '項目' : '語';
+        const detail = mm.studied ? `定着 ${mm.solid}・覚えた ${mm.known}・あやしい ${mm.shaky} / ${mm.total.toLocaleString()}${unit}` : `まだ始めていません · ${mm.total.toLocaleString()}${unit}`;
+        return h('a', { href: `#/m/${m.id}`, style: { display: 'flex', flexDirection: 'column', gap: '7px', color: 'var(--ink)' } },
+          h('div', { class: 'row-between', style: { fontSize: '14px' } },
+            h('span', { style: { fontWeight: 700 } }, shortTitle(m.title)),
+            h('span', { style: { fontSize: '12px', color: 'var(--ink2)' } }, mm.accuracy == null ? '' : `正解率 ${Math.round(mm.accuracy * 100)}%`)),
+          masteryBar(mm, `${m.title}：${detail}`),
+          h('span', { style: { fontSize: '12px', color: 'var(--muted)' } }, detail));
+      })));
+  }
+
+  // バッジ
+  const st = store.badgeStatus();
+  const got = st.filter(b => b.earned).length;
+  const nextB = st.filter(b => !b.earned).sort((a, b) => (b.value / b.goal) - (a.value / a.goal))[0];
+  main.append(h('section', { class: 'card night', style: { padding: '18px 16px', gap: '16px' } },
+    h('div', { class: 'row-between', style: { alignItems: 'baseline' } },
+      h('h2', { style: { fontSize: '15px' } }, 'バッジ'),
+      h('span', { style: { fontSize: '12px', color: 'var(--nightInk)' } }, `${got} / ${st.length}`)),
+    nextB ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px 14px', borderRadius: '16px', background: 'var(--night2)' } },
+      h('div', { class: 'row-between', style: { fontSize: '13px' } },
+        h('span', { style: { fontWeight: 700 } }, `次は「${nextB.name}」`),
+        h('span', { style: { color: 'var(--nightInk)' } }, `あと${(nextB.goal - nextB.value).toLocaleString()}${nextB.unit}`)),
+      h('div', { style: { height: '6px', borderRadius: '3px', background: '#2F386A', overflow: 'hidden' } },
+        h('div', { style: { width: `${Math.min(100, (nextB.value / nextB.goal) * 100)}%`, height: '6px', borderRadius: '3px', background: 'var(--hl)' } }))) : null,
+    h('div', { class: 'badges' }, ...st.map(b => h('div', { class: 'badge-cell' },
+      medal(b),
+      h('span', { class: 'n', style: { color: b.earned ? '#fff' : 'var(--nightInk)' } }, b.name),
+      b.earned
+        ? (b.at ? h('span', { class: 'p' }, md(new Date(b.at))) : null)
+        : h('span', { class: 'p' }, `${Math.min(b.value, b.goal).toLocaleString()} / ${b.goal.toLocaleString()}${b.unit}`))))));
   return main;
 }
-const st = (n, l) => h('div', {}, h('div', { class: 'n' }, n), h('div', { class: 'l' }, l));
 
-function chart(store) {
-  const days = []; const start = dayStart() - 27 * 86400000;
-  for (let i = 0; i < 28; i++) { const k = dayKey(start + i * 86400000); days.push({ k, v: store.days.find(d => d.key === k)?.reviews || 0 }); }
-  const max = Math.max(1, ...days.map(d => d.v)); const W = 560, H = 120, bw = W / 28;
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('class', 'chart');
-  days.forEach((d, i) => {
-    const hgt = d.v / max * (H - 24);
-    const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    r.setAttribute('x', i * bw + 2); r.setAttribute('y', H - 18 - hgt); r.setAttribute('width', bw - 4); r.setAttribute('height', hgt); r.setAttribute('rx', 2);
-    r.setAttribute('fill', i === 27 ? 'var(--accent)' : 'var(--young)'); svg.append(r);
-    if (d.v) { const t = document.createElementNS('http://www.w3.org/2000/svg', 'text'); t.setAttribute('x', i * bw + bw / 2); t.setAttribute('y', H - 22 - hgt); t.setAttribute('text-anchor', 'middle'); t.setAttribute('font-size', '9'); t.setAttribute('fill', 'var(--muted)'); t.textContent = d.v; svg.append(t); }
-    if (i % 7 === 6 || i === 27) { const t = document.createElementNS('http://www.w3.org/2000/svg', 'text'); t.setAttribute('x', i * bw + bw / 2); t.setAttribute('y', H - 4); t.setAttribute('text-anchor', 'middle'); t.setAttribute('font-size', '10'); t.setAttribute('fill', 'var(--muted)'); t.textContent = d.k.slice(5).replace('-', '/'); svg.append(t); }
-  });
-  return svg;
+const pc = f => Math.round(Math.min(1, f) * 100) + '%';
+const md = d => `${d.getMonth() + 1}月${d.getDate()}日`;
+function hm(ms) { const m = Math.round(ms / 60000); return [Math.floor(m / 60), m % 60]; }
+function statCard(k, v, unit, s, hmv = null) {
+  return h('div', { class: 'stat-card' },
+    h('span', { class: 'k' }, k),
+    hmv ? h('span', { class: 'v' }, String(hmv[0]), h('small', {}, '時間'), String(hmv[1]), h('small', {}, '分'))
+      : h('span', { class: 'v' }, String(v), unit ? h('small', {}, unit) : null),
+    h('span', { class: 's' }, s));
 }
-
-function materialCard(store, m) {
-  const { counts, decks } = store.progress(m.id);
-  const pct = k => (counts[k] / Math.max(1, counts.total) * 100) + '%';
-  const open = h('details', {}, h('summary', { class: 'muted small', style: { cursor: 'pointer', marginTop: '8px' } }, `${m.deckLabel || 'Deck'} ごとの内訳`),
-    h('table', {}, h('tr', {}, h('th', {}, m.deckLabel || ''), h('th', {}, '未学習'), h('th', {}, '学習中'), h('th', {}, '復習'), h('th', {}, '定着')),
-      ...decks.map(d => h('tr', {}, h('td', {}, d.title), h('td', {}, d.new), h('td', {}, d.learning), h('td', {}, d.young), h('td', {}, d.mature)))));
-  return h('div', { class: 'card' }, h('h2', {}, m.title),
-    h('div', { class: 'bar' }, h('span', { class: 'c-mature', style: { width: pct('mature') } }), h('span', { class: 'c-young', style: { width: pct('young') } }), h('span', { class: 'c-learning', style: { width: pct('learning') } })),
-    h('div', { class: 'legend' }, leg('c-mature', `定着 ${fmtNum(counts.mature)}`), leg('c-young', `復習中 ${fmtNum(counts.young)}`), leg('c-learning', `学習中 ${fmtNum(counts.learning)}`), leg('c-new', `未学習 ${fmtNum(counts.new)}`), h('span', {}, `合計 ${fmtNum(counts.total)}`)),
-    open);
-}
-const leg = (c, t) => h('span', {}, h('i', { class: c }), t);

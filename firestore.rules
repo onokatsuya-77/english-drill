@@ -1,14 +1,14 @@
 rules_version = '2';
 // Firebase コンソールの Firestore →「ルール」に貼り付けて「公開」する。
-// ADMIN_EMAIL を管理者の Google アカウントのメールアドレスに書き換えてから貼ること
-// （公開リポジトリにメールアドレスを載せないため、ここには仮の値を入れている）。
+// family() に、使う人の Google アカウントのメールアドレスを並べる（先頭が管理者）。
+// 公開リポジトリにメールアドレスを載せないため、ここには仮の値を入れている。
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() { return request.auth != null; }
-    function isAdmin() {
-      return signedIn() && request.auth.token.email_verified == true
-        && request.auth.token.email in ['ADMIN_EMAIL'];
-    }
+    function family() { return ['ADMIN_EMAIL', 'FAMILY_EMAIL_1', 'FAMILY_EMAIL_2']; }
+    function admins() { return ['ADMIN_EMAIL']; }
+    function signedIn() { return request.auth != null && request.auth.token.email_verified == true; }
+    function isFamily() { return signedIn() && request.auth.token.email in family(); }
+    function isAdmin() { return signedIn() && request.auth.token.email in admins(); }
 
     // 管理者かどうかの確認用（アプリが読めるかどうかを試す。文書は作らなくてよい）
     match /config/{docId} {
@@ -16,21 +16,21 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // 教材: ログインした人は読める。登録・更新は管理者だけ。
+    // 家族の教材: 家族は読める。登録・更新は管理者だけ。
     match /materials/{materialId} {
-      allow read: if signedIn();
+      allow read: if isFamily();
       allow write: if isAdmin();
       match /{sub}/{docId} {
-        allow read: if signedIn();
+        allow read: if isFamily();
         allow write: if isAdmin();
       }
     }
 
-    // 利用者のデータ: 本人だけが読み書きできる。
+    // 利用者のデータ（学習者・学習の記録・自分の教材）: 家族の本人だけが読み書きできる。
     match /users/{uid} {
-      allow read, write: if signedIn() && request.auth.uid == uid;
+      allow read, write: if isFamily() && request.auth.uid == uid;
       match /{document=**} {
-        allow read, write: if signedIn() && request.auth.uid == uid;
+        allow read, write: if isFamily() && request.auth.uid == uid;
       }
     }
   }

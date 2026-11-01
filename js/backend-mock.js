@@ -10,6 +10,7 @@ const emit = (uid, pid) => {
   subs.cards.forEach(f => f(Object.entries(p.cards || {}).map(([id, data]) => ({ type: 'added', id, data })), false));
   subs.days.forEach(f => f(Object.entries(p.days || {}).map(([key, d]) => ({ key, ...d }))));
 };
+const addDeep = (t, d) => { for (const [k, v] of Object.entries(d)) { if (v && typeof v === 'object') { t[k] ||= {}; addDeep(t[k], v); } else t[k] = (t[k] || 0) + v; } };
 
 export const backend = {
   name: 'mock',
@@ -36,10 +37,21 @@ export const backend = {
   async saveReview(uid, pid, cardId, state, log, dayKey, delta) {
     const s = load(); const p = s.users[uid].profiles[pid];
     p.cards[cardId] = state; (p.logs ||= []).push({ cardId, ...log });
-    const d = (p.days[dayKey] ||= { date: dayKey }); for (const [k, v] of Object.entries(delta)) d[k] = (d[k] || 0) + v;
+    const d = (p.days[dayKey] ||= { date: dayKey }); addDeep(d, delta);
     save(s);
     subs.cards.forEach(f => f([{ type: 'modified', id: cardId, data: state }], false));
     subs.days.forEach(f => f(Object.entries(p.days).map(([key, x]) => ({ key, ...x }))));
   },
   async saveBadges(uid, pid, badges) { await this.updateProfile(uid, pid, { badges }); },
+
+  // 自分の教材
+  async listOwnMaterials(uid) { const s = load(); return Object.values(s.users[uid]?.materials || {}).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)); },
+  async loadOwnChunks(uid, mid) { const s = load(); return (s.users[uid]?.ownChunks?.[mid] || []).flatMap(c => c.items); },
+  async saveOwnMaterial(uid, material, cardChunks) {
+    const s = load(); const u = s.users[uid]; const version = Date.now();
+    (u.materials ||= {})[material.id] = { ...material, version, cardChunks: cardChunks.length, createdAt: material.createdAt || Date.now() };
+    (u.ownChunks ||= {})[material.id] = cardChunks.map((items, i) => ({ i, items }));
+    save(s); return version;
+  },
+  async deleteOwnMaterial(uid, mid) { const s = load(); const u = s.users[uid]; delete u.materials?.[mid]; delete u.ownChunks?.[mid]; save(s); },
 };

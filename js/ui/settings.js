@@ -1,47 +1,42 @@
 import { h, toast } from '../dom.js';
 import { APP_VERSION } from '../config.js';
+import { icon } from './parts.js';
 
+/** 設定: 学習者、1日の目標、教材、管理、ログアウト */
 export function renderSettings(store, { go, isAdmin }) {
-  const s = store.profile.settings;
-  const save = async patch => { try { await store.saveSettings(patch); toast('保存しました'); } catch (e) { alert('保存できませんでした: ' + e.message); } };
-  const main = h('main', {},
-    h('div', { class: 'card' }, h('h2', {}, '学習'),
-      field('1 日に始める新しいカード', h('select', { onchange: e => save({ newPerDay: Number(e.target.value) }) },
-        ...[0, 5, 10, 15, 20, 30, 50].map(n => h('option', { value: n, selected: s.newPerDay === n }, `${n} 枚`)))),
-      field('出題の向き', h('select', { onchange: e => save({ direction: e.target.value }) },
-        h('option', { value: 'en-ja', selected: s.direction === 'en-ja' }, '英語 → 日本語'),
-        h('option', { value: 'ja-en', selected: s.direction === 'ja-en' }, '日本語 → 英語')))),
-    h('div', { class: 'card' }, h('h2', {}, '教材'),
-      ...store.materials.map(m => materialSettings(store, m, save)),
-      !store.materials.length ? h('p', { class: 'muted' }, '教材が登録されていません。') : null),
-    h('div', { class: 'card' }, h('h2', {}, '学習者'),
-      field('名前', h('button', { onclick: async () => { const n = prompt('名前', store.profile.name); if (n && n !== store.profile.name) { await store.renameProfile(n); toast('変更しました'); } } }, store.profile.name)),
-      field('学習者を切り替える', h('button', { onclick: () => go('profiles') }, '一覧')),
-      field(store.user.email, h('button', { onclick: () => store.backend.signOut() }, 'ログアウト'))),
-    isAdmin ? h('div', { class: 'card' }, h('h2', {}, '管理'), field('教材の登録・更新', h('button', { onclick: () => go('admin') }, '管理画面'))) : null,
-    h('p', { class: 'muted small center' }, `English Drill v${APP_VERSION}`),
+  const p = store.profile, g = p.settings.goals;
+  const main = h('main', {});
+  const row = (label, value, options, onchange) => {
+    const id = 'g-' + label;
+    return h('div', { class: 'set-row' }, h('label', { for: id }, label),
+      h('select', { id, onchange: e => onchange(e.target.value) }, ...options.map(([v, t]) => h('option', { value: String(v), selected: String(v) === String(value) }, t))));
+  };
+  const link = (label, href, value = '') => h('a', { class: 'set-row', href }, h('span', {}, label), h('span', { class: 'row', style: { gap: '4px', color: 'var(--ink2)', fontWeight: 600 } }, value, icon('back', 18, 2.2)));
+  // 「戻る」の矢印を右向きに
+  const fix = el => { el.querySelectorAll('svg').forEach(s => { s.style.transform = 'rotate(180deg)'; }); return el; };
+
+  main.append(
+    h('h1', { class: 'page-title' }, '設定'),
+    h('div', { class: 'sec-h' }, h('h2', {}, '学習者')),
+    h('div', { class: 'list' },
+      fix(link('学習者を切り替える・追加する', '#/profiles', p.name)),
+      h('button', { class: 'set-row', style: { cursor: 'pointer' }, onclick: async () => {
+        const name = prompt('学習者の名前', p.name); if (!name || !name.trim()) return;
+        await store.renameProfile(name.trim()); toast('名前を変えました');
+      } }, h('span', {}, '名前を変える'), h('span', { style: { color: 'var(--ink2)', fontWeight: 600 } }, p.name))),
+    h('div', { class: 'sec-h' }, h('h2', {}, '1日の目標'), h('span', { class: 'small muted' }, 'ホームのリングの目標です。新しい語の目標は、教材ごとの「1日の新しい語」の合計です。')),
+    h('div', { class: 'list' },
+      row('学習時間', g.minutes, [10, 15, 20, 30, 45, 60, 90].map(n => [n, `${n}分`]), v => store.saveSettings({ goals: { ...g, minutes: Number(v) } })),
+      row('回答', g.answers, [30, 50, 100, 150, 200, 300].map(n => [n, `${n}回`]), v => store.saveSettings({ goals: { ...g, answers: Number(v) } }))),
+    h('div', { class: 'sec-h' }, h('h2', {}, '教材')),
+    h('div', { class: 'list' }, fix(link('教材を追加・外す', '#/add', `${store.enabledMaterials().length}冊`))),
+    isAdmin ? h('div', { class: 'sec-h' }, h('h2', {}, '管理')) : null,
+    isAdmin ? h('div', { class: 'list' }, fix(link('家族の教材を登録・更新する', '#/admin'))) : null,
+    h('div', { class: 'sec-h' }, h('h2', {}, 'アカウント')),
+    h('div', { class: 'list' },
+      h('div', { class: 'set-row' }, h('span', {}, 'ログイン中'), h('span', { style: { color: 'var(--ink2)', fontSize: '13px' } }, store.user.email)),
+      h('button', { class: 'set-row', style: { color: 'var(--red)', cursor: 'pointer' }, onclick: () => store.backend.signOut() }, h('span', {}, 'ログアウト'), icon('logout', 20))),
+    h('p', { class: 'center small muted', style: { marginTop: '20px' } }, `English Drill v${APP_VERSION}`),
   );
   return main;
-}
-const field = (label, ctrl) => h('div', { class: 'field' }, h('span', {}, label), ctrl);
-
-function materialSettings(store, m, save) {
-  const ms = store.profile.settings.materials[m.id] || { enabled: true };
-  const setM = patch => save({ materials: { ...store.profile.settings.materials, [m.id]: { ...ms, ...patch } } });
-  const enabled = ms.enabled !== false;
-  const deckSel = ms.decks; // undefined = 全部
-  const decks = h('details', { open: false },
-    h('summary', { class: 'small muted', style: { cursor: 'pointer' } }, deckSel ? `新しいカードを出す範囲: ${deckSel.length} / ${m.decks.length} ${m.deckLabel}` : `新しいカードを出す範囲: すべての ${m.deckLabel}`),
-    h('div', { class: 'row small', style: { marginTop: '6px' } },
-      h('button', { class: 'ghost', onclick: () => setM({ decks: undefined }) }, 'すべて'),
-      h('button', { class: 'ghost', onclick: () => setM({ decks: [] }) }, 'なし')),
-    h('div', { class: 'decks' }, ...m.decks.map(d => h('label', {},
-      h('input', { type: 'checkbox', checked: !deckSel || deckSel.includes(d.no), onchange: e => {
-        const cur = new Set(deckSel || m.decks.map(x => x.no)); e.target.checked ? cur.add(d.no) : cur.delete(d.no);
-        const arr = [...cur].sort((a, b) => a - b); setM({ decks: arr.length === m.decks.length ? undefined : arr });
-      } }), `${d.title} (${d.count})`))));
-  return h('div', { class: 'field', style: { display: 'block' } },
-    h('div', { class: 'row' }, h('label', { class: 'grow' }, h('input', { type: 'checkbox', checked: enabled, onchange: e => setM({ enabled: e.target.checked }) }), ' ', m.title),
-      h('span', { class: 'small muted' }, `${m.cardCount} 枚`)),
-    enabled ? decks : null);
 }
