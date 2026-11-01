@@ -128,3 +128,44 @@ export function illus(card, images, maxW = 240) {
   if (!src) return null;
   return h('img', { class: 'illus', src, alt: `${card.front} の挿絵`, style: { maxWidth: maxW + 'px' } });
 }
+
+/**
+ * 下から出るメニュー。actions: [{ label, sub, onclick, current, danger }]。
+ * 背景を押す・Esc・「やめる」で閉じる。開いたら最初のボタンにフォーカスする。
+ */
+export function actionSheet(title, subtitle, actions) {
+  const prev = document.activeElement;
+  const close = () => { back.remove(); document.removeEventListener('keydown', onKey); prev?.focus?.(); };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  const sheet = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
+    h('div', { class: 'sheet-title' }, h('b', {}, title), subtitle ? h('span', {}, subtitle) : null),
+    ...actions.map(a => h('button', { type: 'button', class: a.danger ? 'danger' : '', 'aria-current': a.current ? 'true' : null,
+      onclick: async () => { close(); await a.onclick(); } }, a.label, a.sub ? h('small', {}, a.sub) : null)),
+    h('button', { type: 'button', class: 'cancel', onclick: close }, 'やめる'));
+  const back = h('div', { class: 'sheet-back', onclick: e => { if (e.target === back) close(); } }, sheet);
+  document.body.append(back);
+  document.addEventListener('keydown', onKey);
+  sheet.querySelector('button')?.focus();
+  return close;
+}
+
+/**
+ * 長押し（とパソコンの右クリック）で onLong を呼ぶ。指が動いたら（スクロール）取りやめる。
+ * 長押しのあとのクリックは打ち消すので、ふつうに押したときだけリンクとして動く。
+ */
+export function onLongPress(el, onLong, ms = 500) {
+  let timer = null, x = 0, y = 0, fired = false;
+  const cancel = () => { clearTimeout(timer); timer = null; el.classList.remove('pressing'); };
+  el.addEventListener('pointerdown', e => {
+    if (e.button && e.button !== 0) return;
+    fired = false; x = e.clientX; y = e.clientY; el.classList.add('pressing');
+    timer = setTimeout(() => { timer = null; fired = true; el.classList.remove('pressing'); navigator.vibrate?.(15); onLong(); }, ms);
+  });
+  el.addEventListener('pointermove', e => { if (timer && Math.hypot(e.clientX - x, e.clientY - y) > 10) cancel(); });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => el.addEventListener(t, cancel));
+  el.addEventListener('click', e => { if (fired) { e.preventDefault(); e.stopPropagation(); fired = false; } }, true);
+  // パソコンの右クリック。Android は長押しでも contextmenu が来るので、すでに開いていれば二重に開かない
+  // （次に押したときの pointerdown で fired は戻るので、右クリックのあとのふつうのクリックは効く）
+  el.addEventListener('contextmenu', e => { e.preventDefault(); if (fired) return; cancel(); fired = true; onLong(); });
+  return el;
+}

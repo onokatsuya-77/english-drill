@@ -24,10 +24,11 @@ export function renderSettings(store, { go, isAdmin }) {
         const name = prompt('学習者の名前', p.name); if (!name || !name.trim()) return;
         await store.renameProfile(name.trim()); toast('名前を変えました');
       } }, h('span', {}, '名前を変える'), h('span', { style: { color: 'var(--ink2)', fontWeight: 600 } }, p.name))),
-    h('div', { class: 'sec-h' }, h('h2', {}, '1日の目標'), h('span', { class: 'small muted' }, 'ホームのリングの目標です。新しい語の目標は、教材ごとの「1日の新しい語」の合計です。')),
+    h('div', { class: 'sec-h' }, h('h2', {}, '1日の目標'), h('span', { class: 'small muted' }, 'ホームのリングの目標です。語数と新しい語の目標は、取組中の教材の「1日の語数」「1日の新しい語」の合計です（教材ページの設定で変えられます）。')),
     h('div', { class: 'list' },
       row('学習時間', g.minutes, [10, 15, 20, 30, 45, 60, 90].map(n => [n, `${n}分`]), v => store.saveSettings({ goals: { ...g, minutes: Number(v) } })),
-      row('回答', g.answers, [30, 50, 100, 150, 200, 300].map(n => [n, `${n}回`]), v => store.saveSettings({ goals: { ...g, answers: Number(v) } }))),
+      h('div', { class: 'set-row' }, h('span', {}, '語数（取組中の合計）'), h('span', { style: { color: 'var(--ink2)', fontWeight: 600 } }, `${store.goals().wordsSum}語`)),
+      h('div', { class: 'set-row' }, h('span', {}, '新しい語（取組中の合計）'), h('span', { style: { color: 'var(--ink2)', fontWeight: 600 } }, `${store.goals().newSum}語`))),
     h('div', { class: 'sec-h' }, h('h2', {}, '教材')),
     h('div', { class: 'list' }, fix(link('教材を追加・外す', '#/add', `${store.enabledMaterials().length}冊`))),
     isAdmin ? h('div', { class: 'sec-h' }, h('h2', {}, '管理')) : null,

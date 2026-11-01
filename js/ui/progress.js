@@ -26,10 +26,10 @@ export function renderProgress(store) {
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '4px' } },
         ...week.map((d, i) => {
           const name = WD[(i + 1) % 7];
-          const fr = d ? [(d.studyMs || 0) / 60000 / g.minutes, (d.reviews || 0) / g.answers, (d.newCards || 0) / g.newWords] : [0, 0, 0];
+          const fr = d ? store.ringFractions(d) : [0, 0, 0];
           const isToday = i === dow;
           return h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', opacity: d ? 1 : 0.45 } },
-            miniRings(fr, `${name}曜日：学習時間${pc(fr[0])}、回答${pc(fr[1])}、新しい語${pc(fr[2])}`),
+            miniRings(fr, `${name}曜日：学習時間${pc(fr[0])}、語数${pc(fr[1])}、新しい語${pc(fr[2])}`),
             h('span', { style: { fontSize: '12px', fontWeight: isToday ? 800 : 500, color: isToday ? '#fff' : 'var(--nightInk)' } }, name));
         }))));
 

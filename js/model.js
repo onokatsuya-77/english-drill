@@ -16,7 +16,14 @@ export function dayKey(t = Date.now()) {
 export function dayStart(t = Date.now()) { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); }
 
 export const DEFAULT_SETTINGS = { goals: { minutes: 30, answers: 100 }, materials: {} };
-export const DEFAULT_MAT = { enabled: true, newPerDay: 10, direction: 'en-ja', order: 'book', mode: 'mix', newStyle: 'quiz', minRank: 0 };
+export const DEFAULT_MAT = { newPerDay: 10, wordsPerDay: 30, direction: 'en-ja', order: 'book', mode: 'mix', newStyle: 'quiz', minRank: 0 };
+/** 教材の状態。取組中だけが今日の学習と今日の目標に入る。休憩中は新しい語も復習も出さない */
+export const STATUS = [
+  ['active', '取組中', '今日の学習と目標に入ります'],
+  ['paused', '休憩中', '新しい語も復習も出しません（記録は残ります）'],
+  ['later', '取り掛かる前', 'まだ始めない教材です'],
+];
+export const STATUS_NAME = Object.fromEntries(STATUS.map(([id, name]) => [id, name]));
 export const MODES = [['card', 'カード'], ['choice', '4択'], ['spell', 'つづり'], ['cloze', '穴埋め'], ['listen', 'リスニング'], ['mix', 'ミックス']];
 
 /** 1 枚の覚え具合: new（未学習）/ shaky（あやしい）/ known（覚えた）/ solid（定着） */
@@ -193,21 +200,37 @@ export class Store extends EventTarget {
     await this.backend.updateProfile(this.user.uid, this.profile.id, { settings: this.profile.settings });
     await this.loadEnabledMaterials(); this.emit();
   }
-  /** 教材ごとの設定（newPerDay, direction, order, mode, enabled） */
+  /** 教材ごとの設定（status, newPerDay, wordsPerDay, direction, order, mode …）。
+   * status は active（取組中）/ paused（休憩中）/ later（取り掛かる前）/ off（一覧から外した）。
+   * まだ決めていない教材は、学習したことがあれば取組中、無ければ取り掛かる前とみなす（前の enabled: false は off） */
   matSettings(mid) {
     const m = this.materials.find(x => x.id === mid);
     const saved = this.profile?.settings.materials[mid] || {};
-    const enabledDefault = m?.own ? m.owner === this.profile?.id : true;
-    return { ...DEFAULT_MAT, enabled: enabledDefault, ...saved };
+    let status = saved.status;
+    if (!status) {
+      if (saved.enabled === false || (m?.own && m.owner !== this.profile?.id)) status = 'off';
+      else status = m?.own || this.studiedMaterials().has(mid) ? 'active' : 'later';
+    }
+    return { ...DEFAULT_MAT, ...saved, status, enabled: status !== 'off' };
   }
+  /** 学習記録のある教材の id（学習記録の数が変わったときだけ数え直す） */
+  studiedMaterials() {
+    if (this._studiedN !== this.states.size) { this._studiedN = this.states.size; this._studied = new Set([...this.states.values()].map(s => s.m)); }
+    return this._studied;
+  }
+  async setStatus(mid, status) { await this.saveMatSettings(mid, { status, enabled: status !== 'off' }); }
   async saveMatSettings(mid, patch) {
     const all = { ...this.profile.settings.materials, [mid]: { ...(this.profile.settings.materials[mid] || {}), ...patch } };
     await this.saveSettings({ materials: all });
   }
   async renameProfile(name) { this.profile.name = name; await this.backend.updateProfile(this.user.uid, this.profile.id, { name }); this.emit(); }
 
+  /** 一覧に出す教材（取組中・休憩中・取り掛かる前）。カードはこれを全部読み込む */
   enabledMaterials() { return this.materials.filter(m => this.matSettings(m.id).enabled); }
   enabledMaterialIds() { return this.enabledMaterials().map(m => m.id); }
+  /** 取組中の教材（今日の学習・今日の目標に入る） */
+  activeMaterials() { return this.materials.filter(m => this.matSettings(m.id).status === 'active'); }
+  activeMaterialIds() { return this.activeMaterials().map(m => m.id); }
   material(mid) { return this.materials.find(m => m.id === mid) || null; }
 
   /** 使う教材のカードを並べて読み込む。挿絵は待たずに後ろで読み込み、届いたら画面を描き直す */
@@ -258,28 +281,71 @@ export class Store extends EventTarget {
   today() { return this.days.find(d => d.key === dayKey()) || { key: dayKey(), reviews: 0, newCards: 0, studyMs: 0, byM: {} }; }
   todayFor(mid) { const t = this.today(); return (t.byM && t.byM[mid]) || { reviews: 0, newCards: 0, studyMs: 0, again: 0 }; }
   stateOf(cardId) { return this.states.get(cardId) || null; }
+  /** 今日の目標: 学習時間（全体の設定）と、取組中の教材の「1日の語数」「1日の新しい語」の合計 */
   goals() {
     const g = this.profile.settings.goals;
-    const newWords = this.enabledMaterials().reduce((a, m) => a + this.matSettings(m.id).newPerDay, 0);
-    return { minutes: g.minutes, answers: g.answers, newWords: Math.max(1, newWords) };
+    // 語の少ない教材（自作の単語帳など）は、その語数までしか目標に数えない
+    const act = this.activeMaterials().map(m => { const ms = this.matSettings(m.id), n = (this.cards.get(m.id) || []).length || Infinity;
+      return { wordsPerDay: Math.min(ms.wordsPerDay, n), newPerDay: Math.min(ms.newPerDay, n) }; });
+    const sum = k => act.reduce((a, ms) => a + ms[k], 0);
+    // words / newWords は割り算用（0 にしない）。表示には wordsSum / newSum を使う
+    return { minutes: g.minutes, words: Math.max(1, sum('wordsPerDay')), newWords: Math.max(1, sum('newPerDay')), wordsSum: sum('wordsPerDay'), newSum: sum('newPerDay') };
+  }
+  /** その日の、取組中の教材の分の合計（学習時間・語数・新しい語）。語数の記録が無い古い日は回答数で代える */
+  dayActive(d) {
+    const by = d?.byM || {}, act = this.activeMaterialIds();
+    const sum = k => act.reduce((a, id) => a + ((by[id] || {})[k] || 0), 0);
+    const hasWords = act.some(id => (by[id] || {}).words != null);
+    return { studyMs: sum('studyMs'), words: hasWords ? sum('words') : sum('reviews'), newCards: sum('newCards'), reviews: sum('reviews') };
+  }
+  /** リング用: [学習時間, 語数, 新しい語] の達成率 */
+  ringFractions(d) {
+    const g = this.goals(), a = this.dayActive(d);
+    return [a.studyMs / 60000 / g.minutes, a.words / g.words, a.newCards / g.newWords];
   }
 
-  /** 教材の今日の数: 復習（期限が来た復習）、学習中（期限が来た学習中）、新規の残り */
+  /**
+   * 教材の今日の数（取組中の教材だけ。ほかは 0）:
+   *  ① 期限の来た復習・学習中は全部
+   *  ② 新しい語は「1日の新しい語」まで必ず
+   *  ③ 今日の語数が「1日の語数」に届かなければ、新しい語を足す
+   *  ④ 新しい語も無ければ、復習日が近い語を先取りで出す
+   */
   counts(mid, now = Date.now()) {
-    let due = 0, learning = 0;
+    const ms = this.matSettings(mid);
+    const zero = { due: 0, learning: 0, review: 0, newLeft: 0, ahead: 0, total: 0, status: ms.status };
+    if (ms.status !== 'active') return zero;
+    const today = dayKey(now);
+    let due = 0, learning = 0, fresh = 0;
     for (const c of this.cards.get(mid) || []) {
       const s = this.states.get(c.id); if (!s || s.due > now) continue;
       if (s.state === State.Review) due++; else learning++;
+      if (!s.lastReview || dayKey(s.lastReview) !== today) fresh++; // 今日まだ出していない語
     }
-    const ms = this.matSettings(mid);
-    const newLeft = Math.max(0, ms.newPerDay - (this.todayFor(mid).newCards || 0));
-    const newAvail = this.newCandidates(mid, newLeft).length;
-    return { due, learning, review: due + learning, newLeft: Math.min(newLeft, newAvail), total: due + learning + Math.min(newLeft, newAvail) };
+    const t = this.todayFor(mid);
+    const baseNew = Math.max(0, ms.newPerDay - (t.newCards || 0));
+    const wordsToday = t.words ?? t.reviews ?? 0;
+    const allNew = this.newCandidates(mid, Infinity).length;
+    const base = Math.min(baseNew, allNew);
+    const need = Math.max(0, ms.wordsPerDay - wordsToday - fresh - base);
+    const extraNew = Math.min(need, allNew - base);
+    const ahead = need - extraNew > 0 ? this.aheadCandidates(mid, need - extraNew, now).length : 0;
+    const newLeft = base + extraNew;
+    return { due, learning, review: due + learning, newLeft, ahead, total: due + learning + newLeft + ahead, status: ms.status };
   }
   totalCounts(now = Date.now()) {
-    let review = 0, fresh = 0;
-    for (const id of this.enabledMaterialIds()) { const c = this.counts(id, now); review += c.review; fresh += c.newLeft; }
-    return { review, fresh };
+    let review = 0, fresh = 0, ahead = 0;
+    for (const id of this.activeMaterialIds()) { const c = this.counts(id, now); review += c.review; fresh += c.newLeft; ahead += c.ahead; }
+    return { review, fresh, ahead };
+  }
+  /** 先取り: 期限前の復習の語を、復習日が近い順に（今日すでに出した語は除く） */
+  aheadCandidates(mid, limit, now = Date.now()) {
+    if (limit <= 0) return [];
+    const today = dayKey(now);
+    return (this.cards.get(mid) || [])
+      .filter(c => { const s = this.states.get(c.id); return s && s.due > now && !(s.lastReview && dayKey(s.lastReview) === today); })
+      .sort((a, b) => this.states.get(a.id).due - this.states.get(b.id).due)
+      .slice(0, limit);
   }
   newCandidates(mid, limit, deckNo = null) {
     const out = [];
@@ -306,8 +372,9 @@ export class Store extends EventTarget {
       for (const c of cards) { const s = st(c); if (s && s.due <= now) (s.state === State.Review ? due : learning).push(c); }
       const byDue = (a, b) => st(a).due - st(b).due;
       due.sort(byDue); learning.sort(byDue);
-      const { newLeft } = this.counts(mid, now);
-      return [...learning, ...due, ...this.newCandidates(mid, newLeft)];
+      const { newLeft, ahead, status } = this.counts(mid, now);
+      if (status !== 'active') return [];
+      return [...learning, ...due, ...this.newCandidates(mid, newLeft), ...this.aheadCandidates(mid, ahead, now)];
     }
     if (kind === 'deck') {
       const deck = cards.filter(c => c.deckNo === Number(arg));
@@ -342,6 +409,7 @@ export class Store extends EventTarget {
     const key = dayKey(now);
     const studyMs = Math.min(durationMs, 60000);
     const one = { reviews: 1, studyMs };
+    if (!prev.lastReview || dayKey(prev.lastReview) !== key) one.words = 1; // 今日はじめて出た語
     if (wasNew) one.newCards = 1;
     if (!correct) one.again = 1;
     const delta = { ...one, byM: { [card.m]: { ...one } } };

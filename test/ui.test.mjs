@@ -27,7 +27,17 @@ for (const f of ['t1900/tg1900_all_0001-1900.json', 'sj/sj_lessons01-74.json', '
 await shot('03_admin', true);
 await goto('add'); await shot('04_add', true);
 await goto(''); await shot('05_home', true);
-await goto('m/tg1900'); await shot('06_material_empty', true);
+await goto('m/tg1900'); await shot('06_material_later', true);
+// 取り掛かる前 → 取組中（ホームの長押しメニューから）
+await goto(''); await page.waitForTimeout(300);
+const card = page.locator('a.mat[href="#/m/tg1900"]');
+const box = await card.boundingBox();
+await page.mouse.move(box.x + 60, box.y + 20); await page.mouse.down(); await page.waitForTimeout(700); await page.mouse.up();
+await page.waitForTimeout(200); await shot('06b_sheet');
+await page.click('.sheet button:has-text("取組中にする")'); await page.waitForTimeout(400);
+console.log('status after sheet', await page.evaluate(() => window.store.matSettings('tg1900').status), 'url', page.url().split('#')[1]);
+await shot('06c_home_active', true);
+await goto('m/tg1900'); await shot('06d_material_empty', true);
 
 // 今日の学習（カード）
 await goto('study/tg1900/today'); await shot('07_card_front');

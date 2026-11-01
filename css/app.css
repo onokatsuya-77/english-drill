@@ -115,6 +115,23 @@ main.bare { padding-bottom: 24px; min-height: 100vh; min-height: 100dvh; }
 .mat .num { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
 .mat .num b { font-size: 22px; font-weight: 800; line-height: 1; }
 .mat .num span { font-size: 11px; color: var(--muted); }
+.mat { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; transition: transform .12s; }
+.mat.pressing { transform: scale(.97); }
+.mat.compact { padding: 10px 14px 10px 12px; }
+.mat .state { flex-shrink: 0; padding: 5px 10px; border-radius: 999px; background: var(--soft); color: var(--muted); font-size: 12px; font-weight: 700; }
+.mat-h { display: flex; align-items: baseline; justify-content: space-between; padding: 18px 20px 8px; }
+.mat-h h3 { font-size: 14px; font-weight: 700; color: var(--ink2); }
+.mat-h span { font-size: 12px; color: var(--muted); }
+.sheet-back { position: fixed; inset: 0; background: rgba(20,26,51,.45); z-index: 30; display: flex; align-items: flex-end; justify-content: center; }
+.sheet { width: min(100%, 520px); background: var(--surface); border-radius: 22px 22px 0 0; padding: 18px 16px calc(16px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 8px; box-shadow: 0 -8px 30px rgba(20,26,51,.18); }
+.sheet .sheet-title { display: flex; flex-direction: column; gap: 2px; padding: 0 4px 6px; }
+.sheet .sheet-title b { font-size: 16px; }
+.sheet .sheet-title span { font-size: 12px; color: var(--muted); }
+.sheet button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 52px; padding: 10px 14px; border-radius: 14px; border: 0; background: var(--bg); color: var(--ink); font: inherit; font-size: 15px; font-weight: 700; text-align: left; cursor: pointer; }
+.sheet button small { font-size: 12px; font-weight: 500; color: var(--muted); }
+.sheet button[aria-current="true"] { background: var(--indigoTint); color: var(--indigoInk); }
+.sheet button.danger { color: var(--red); }
+.sheet button.cancel { align-items: center; background: transparent; color: var(--ink2); }
 .mat .start { flex-shrink: 0; padding: 7px 12px; border-radius: 999px; background: var(--tealTint); color: var(--teal); font-size: 13px; font-weight: 700; }
 .empty { margin: 14px 16px 0; padding: 22px; border-radius: 20px; background: #fff; text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center; }
 

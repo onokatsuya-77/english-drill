@@ -26,7 +26,8 @@ export function renderStudy(store, { go, params }) {
 
   function header(card, mode, isNew) {
     const st = store.stateOf(card.id);
-    const [label, tone] = mode === 'card' ? [isNew ? '新規' : st?.state === State.Review ? '復習' : '学習中', isNew ? 'teal' : 'indigo'] : MODE_LABEL[mode];
+    const ahead = kind === 'today' && st && st.due > s.startMs; // 復習日より前に出した語
+    const [label, tone] = mode === 'card' ? [isNew ? '新規' : ahead ? '先取り' : st?.state === State.Review ? '復習' : '学習中', isNew ? 'teal' : 'indigo'] : MODE_LABEL[mode];
     const n = Math.min(s.idx + 1, s.queue.length);
     return h('header', { class: 'study-head' },
       h('div', { class: 'row', style: { gap: '8px' } },
@@ -276,8 +277,7 @@ export function renderStudy(store, { go, params }) {
     clear(main);
     main.className = 'result bare';
     const fresh = s.done ? await store.checkBadges() : [];
-    const t = store.today(), g = store.goals();
-    const fr = [(t.studyMs || 0) / 60000 / g.minutes, (t.reviews || 0) / g.answers, (t.newCards || 0) / g.newWords];
+    const fr = store.ringFractions(store.today());
     const all = fr.every(f => f >= 1);
     const misses = [...s.again.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id]) => store.cardIndex.get(id)).filter(Boolean);
     const where = kind === 'today' ? `${shortTitle(m.title)} の今日の分が終わりました` : `${shortTitle(m.title)} · ${deckTitle || KIND_LABEL[kind]}の練習が終わりました`;

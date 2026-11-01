@@ -20,8 +20,8 @@ export function renderAdd(store, { go }) {
         h('span', { style: { fontSize: '15px', fontWeight: 700 } }, m.title),
         h('span', { class: 'small muted' }, `${m.cardCount}${unitOf(m)} · ${m.deckLabel || 'Section'} ${m.decks?.[0]?.no ?? 1}〜${m.decks?.[m.decks.length - 1]?.no ?? 1}${m.passageCount ? ' · 長文つき' : ''}`)),
       on
-        ? h('button', { class: 'btn sm', style: { background: 'transparent', color: 'var(--teal)', gap: '4px' }, 'aria-label': `${m.title}をホームから外す`, onclick: async () => { await store.saveMatSettings(m.id, { enabled: false }); toast('ホームから外しました'); } }, icon('check', 16, 2.4), '追加済み')
-        : h('button', { class: 'btn dark sm', style: { minWidth: '64px' }, onclick: async () => { await store.saveMatSettings(m.id, { enabled: true }); toast('ホームに追加しました'); } }, '追加'));
+        ? h('button', { class: 'btn sm', style: { background: 'transparent', color: 'var(--teal)', gap: '4px' }, 'aria-label': `${m.title}をホームから外す`, onclick: async () => { await store.setStatus(m.id, 'off'); toast('ホームから外しました'); } }, icon('check', 16, 2.4), '追加済み')
+        : h('button', { class: 'btn dark sm', style: { minWidth: '64px' }, onclick: async () => { await store.setStatus(m.id, 'later'); toast('「取り掛かる前」に追加しました'); } }, '追加'));
   };
 
   main.append(
@@ -67,7 +67,7 @@ export function renderAdd(store, { go }) {
       const title = (prompt('教材の名前', f.name.replace(/\.[^.]+$/, '')) || '').trim() || '自分の単語帳';
       const { material, cards } = ownFromRows(rows, { title, owner: store.profile.id });
       await store.backend.saveOwnMaterial(store.user.uid, material, chunk(cards));
-      await store.saveMatSettings(material.id, { enabled: true });
+      await store.setStatus(material.id, 'active');
       await store.refreshMaterials();
       toast(`${material.title}（${cards.length}語）を作りました`);
       go(`m/${material.id}`);
@@ -94,7 +94,7 @@ export function renderAdd(store, { go }) {
           rows.push([front, meaning, f.exEn.value.trim(), f.exJa.value.trim(), '', '']);
           const { material, cards } = ownFromRows(rows, { title: target?.title || '自分の単語帳', owner: store.profile.id, id: target?.id || null, createdAt: target?.createdAt || null });
           await store.backend.saveOwnMaterial(store.user.uid, material, chunk(cards));
-          if (!target) await store.saveMatSettings(material.id, { enabled: true });
+          if (!target) await store.setStatus(material.id, 'active');
           await store.refreshMaterials();
           toast(`「${front}」を足しました`);
         } catch (err) { toast('足せませんでした: ' + err.message); e.target.disabled = false; }

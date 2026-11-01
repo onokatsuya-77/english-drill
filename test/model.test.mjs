@@ -21,6 +21,12 @@ assert.ok(store.profile);
 assert.equal(store.cards.get('sj').length, 1084);
 assert.equal(store.cards.get('tg1900').length, 1900);
 
+// 教材の状態: 学習記録が無い教材は「取り掛かる前」。取組中だけが今日の学習に入る
+assert.equal(store.matSettings('tg1900').status, 'later');
+assert.equal(store.buildQueue('tg1900', 'today').length, 0, '取り掛かる前は出さない');
+await store.setStatus('tg1900', 'active');
+await store.saveMatSettings('tg1900', { wordsPerDay: 10 }); // ここでは「新しい語 10」だけで目標に届く設定
+
 // 教材ごとの今日の学習
 let q = store.buildQueue('tg1900', 'today');
 assert.equal(q.length, 10); assert.equal(q[0].id, 'tg1900-0001');
@@ -30,6 +36,8 @@ assert.equal(store.today().newCards, 10); assert.equal(store.today().reviews, 10
 assert.equal(store.todayFor('tg1900').newCards, 10);
 assert.equal(store.todayFor('sj').newCards, 0, '速読はまだ');
 assert.equal(store.counts('tg1900', now).newLeft, 0);
+assert.equal(store.counts('sj', now).newLeft, 0, '取り掛かる前の教材は 0');
+await store.setStatus('sj', 'active'); await store.saveMatSettings('sj', { wordsPerDay: 10 });
 assert.equal(store.counts('sj', now).newLeft, 10, '新規の枠は教材ごと');
 q = store.buildQueue('tg1900', 'today', null, now + 11 * 60000);
 assert.equal(q.length, 10, '10分後に学習中のカードが出る');
@@ -65,7 +73,25 @@ assert.equal(store.badgeStatus().filter(b => b.earned).length, 1);
 // 教材ごとの設定
 await store.saveMatSettings('tg1900', { newPerDay: 20 });
 assert.equal(store.counts('tg1900', now + 20 * 60000).newLeft, 10, '20語にしたので残り10');
-assert.equal(store.goals().newWords, 30);
+assert.equal(store.goals().newWords, 30, '取組中の tg1900（20）と sj（10）');
+assert.equal(store.goals().words, 20, '語数も取組中の合計');
+
+// 最低語数まで足す: 語数 40 にすると、必ず出す新しい語（残り10）に加えて、届かない分を新しい語で足す
+{
+  const t2 = now + 20 * 60000;
+  await store.saveMatSettings('tg1900', { wordsPerDay: 40 });
+  const c = store.counts('tg1900', t2);
+  const words = store.todayFor('tg1900').words;
+  assert.equal(words, 10, '今日出した語は 10 語（同じ語の 2 回目は数えない）');
+  // もう一度を押した 2 語は今日すでに数えているので、語数には足さない → 新しい語は 40 − 10 = 30
+  assert.equal(c.learning, 2); assert.equal(c.newLeft, 30, '届かない分は新しい語で');
+  assert.equal(c.ahead, 0);
+  // 新しい語が無ければ先取り: 全部学習済みの小さな教材で試す
+  await store.setStatus('tg1900', 'paused');
+  assert.equal(store.buildQueue('tg1900', 'today').length, 0, '休憩中は復習も出さない');
+  assert.equal(store.goals().words, 10, '休憩中は目標に入らない');
+  await store.setStatus('tg1900', 'active'); await store.saveMatSettings('tg1900', { wordsPerDay: 10 });
+}
 
 // 長文
 const pass = await store.loadPassages('sj'); assert.equal(pass.length, 74);
@@ -80,6 +106,18 @@ await store.refreshMaterials();
 assert.ok(store.material(own.material.id)?.own);
 assert.ok(store.matSettings(own.material.id).enabled, '作った学習者には最初から表示');
 assert.equal(store.cards.get(own.material.id).length, 2);
+// 先取り: 新しい語も期限の来た復習も無いときは、復習日が近い順に出す
+{
+  const mid = own.material.id, [a, b] = store.cards.get(mid);
+  assert.equal(store.matSettings(mid).status, 'active', '自分で作った教材は取組中');
+  const base = { state: State.Review, stability: 10, difficulty: 5, reps: 3, lapses: 0, scheduledDays: 10, elapsedDays: 0, m: mid, lastReview: now - 3 * 86400000 };
+  store.states.set(a.id, { ...base, due: now + 5 * 86400000 });
+  store.states.set(b.id, { ...base, due: now + 2 * 86400000 });
+  const c = store.counts(mid, now);
+  assert.equal(c.newLeft, 0); assert.equal(c.ahead, 2);
+  assert.deepEqual(store.buildQueue(mid, 'today', null, now).map(x => x.id), [b.id, a.id], '復習日が近い順');
+  store.states.delete(a.id); store.states.delete(b.id);
+}
 const noHead = ownFromRows([['dog', '犬'], ['cat', '猫']], { title: 'x', owner: 'p' });
 assert.equal(noHead.cards.length, 2, '見出しが無くても 英語・意味 の順で読める');
 

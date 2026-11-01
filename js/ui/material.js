@@ -1,5 +1,5 @@
 import { h, toast } from '../dom.js';
-import { MASTERY, MODES } from '../model.js';
+import { MASTERY, MODES, STATUS } from '../model.js';
 import { icon, coverOf, masteryBar } from './parts.js';
 
 const view = {}; // 画面を描き直しても残す選択（教材ごと）
@@ -11,8 +11,9 @@ export function renderMaterial(store, { go, params }) {
   const main = h('main', {});
   if (!m) { main.append(h('div', { class: 'empty' }, h('p', {}, '教材が見つかりません。'), h('a', { class: 'btn primary', href: '#/' }, 'ホームへ'))); return main; }
   if (!store.cards.has(mid)) {
-    main.append(h('div', { class: 'empty' }, h('p', {}, 'この教材はホームに入っていません。'),
-      h('button', { class: 'btn primary', onclick: async () => { await store.saveMatSettings(mid, { enabled: true }); } }, 'ホームに追加する')));
+    main.append(h('div', { class: 'empty' }, h('p', {}, 'この教材はホームの一覧に入っていません。'),
+      h('button', { class: 'btn primary', onclick: async () => { await store.setStatus(mid, 'active'); } }, '取組中として追加する'),
+      h('button', { class: 'btn outline', onclick: async () => { await store.setStatus(mid, 'later'); } }, '取り掛かる前に追加する')));
     return main;
   }
   const v = (view[mid] ||= { sel: 'shaky', all: false });
@@ -42,22 +43,35 @@ export function renderMaterial(store, { go, params }) {
         h('span', {}, '正解率 ', h('b', {}, mm.accuracy == null ? '—' : Math.round(mm.accuracy * 100) + '%')))),
   );
 
-  // 今日の学習
-  const minutes = Math.max(1, Math.round((c.review * 8 + c.newLeft * 25) / 60));
-  const modeChips = h('div', { class: 'chips' }, ...MODES.map(([id, name]) =>
-    h('button', { type: 'button', class: 'chip', 'aria-pressed': String(ms.mode === id), onclick: () => store.saveMatSettings(mid, { mode: id }) }, name)));
-  main.append(h('section', { class: 'card' },
-    h('h2', {}, '今日の学習'),
-    h('div', { class: 'grid3' }, tile('復習', c.review), tile('新しい語', c.newLeft), tile('目安', c.total ? minutes : 0, '分')),
-    h('div', { class: 'field' }, h('span', { style: { fontSize: '13px', fontWeight: 600, color: 'var(--ink2)' } }, '出題形式'), modeChips,
-      h('span', { class: 'small muted', style: { lineHeight: 1.6 } }, ms.mode === 'card' ? '答えを見て、覚えていたかを自分で評価します。'
-        : (ms.newStyle === 'quiz' ? (ms.mode === 'spell' ? '初めて出る語は、見て覚えてから書きます。' : '初めて出る語も、この形式で出ます。')
-          : '初めて出る語は、まずカードで覚えます。同じ回の2回目から、この形式で出ます。')
-          + (ms.mode === 'spell' && m.kind === 'idioms' ? '熟語は、例文の空欄に入る語を書きます。' : ''))),
-    c.total
-      ? h('a', { class: 'btn primary block', href: `#/study/${mid}/today` }, '今日の学習を始める', icon('arrow', 20, 2.2))
-      : h('div', { class: 'btn outline block', style: { cursor: 'default' } }, '今日の分はおわりました'),
-  ));
+  // 今日の学習（取組中の教材だけ）
+  if (ms.status !== 'active') {
+    main.append(h('section', { class: 'card' },
+      h('h2', {}, '今日の学習'),
+      h('p', { class: 'muted', style: { fontSize: '14px', lineHeight: 1.7 } }, ms.status === 'paused'
+        ? '休憩中です。新しい語も復習も出ません。再開すると、たまった復習から始まります。'
+        : 'まだ取り掛かる前の教材です。始めると、今日の学習と今日の目標に入ります。'),
+      h('button', { class: 'btn primary block', onclick: async () => { await store.setStatus(mid, 'active'); toast('取組中にしました'); } },
+        ms.status === 'paused' ? '再開する（取組中にする）' : 'この教材を始める（取組中にする）')));
+  } else {
+    const minutes = Math.max(1, Math.round(((c.review + c.ahead) * 8 + c.newLeft * 25) / 60));
+    const modeChips = h('div', { class: 'chips' }, ...MODES.map(([id, name]) =>
+      h('button', { type: 'button', class: 'chip', 'aria-pressed': String(ms.mode === id), onclick: () => store.saveMatSettings(mid, { mode: id }) }, name)));
+    main.append(h('section', { class: 'card' },
+      h('h2', {}, '今日の学習'),
+      h('div', { class: 'grid3' }, tile('復習', c.review + c.ahead), tile('新しい語', c.newLeft), tile('目安', c.total ? minutes : 0, '分')),
+      h('span', { class: 'small muted', style: { lineHeight: 1.6 } },
+        `1日の語数は ${ms.wordsPerDay}${unit}（最低）。復習のあと、届かない分は新しい語で、それも無ければ復習日が近い語の先取りで埋めます。`
+        + (c.ahead ? `今日は先取りが ${c.ahead}${unit} あります。` : '')),
+      h('div', { class: 'field' }, h('span', { style: { fontSize: '13px', fontWeight: 600, color: 'var(--ink2)' } }, '出題形式'), modeChips,
+        h('span', { class: 'small muted', style: { lineHeight: 1.6 } }, ms.mode === 'card' ? '答えを見て、覚えていたかを自分で評価します。'
+          : (ms.newStyle === 'quiz' ? (ms.mode === 'spell' ? '初めて出る語は、見て覚えてから書きます。' : '初めて出る語も、この形式で出ます。')
+            : '初めて出る語は、まずカードで覚えます。同じ回の2回目から、この形式で出ます。')
+            + (ms.mode === 'spell' && m.kind === 'idioms' ? '熟語は、例文の空欄に入る語を書きます。' : ''))),
+      c.total
+        ? h('a', { class: 'btn primary block', href: `#/study/${mid}/today` }, '今日の学習を始める', icon('arrow', 20, 2.2))
+        : h('div', { class: 'btn outline block', style: { cursor: 'default' } }, '今日の分はおわりました'),
+    ));
+  }
 
   // 覚え具合
   const mastery = h('section', { class: 'card', 'aria-labelledby': `mt-${mid}` },
@@ -113,15 +127,17 @@ export function renderMaterial(store, { go, params }) {
   // 設定
   main.append(h('div', { class: 'sec-h' }, h('h2', {}, 'この教材の設定')));
   main.append(h('div', { class: 'list' },
-    setRow('1日の新しい語', ms.newPerDay, [0, 5, 10, 15, 20, 30, 50].map(n => [n, `${n}${unit}`]), val => store.saveMatSettings(mid, { newPerDay: Number(val) })),
+    setRow('状態', ms.status, STATUS.map(([id, name]) => [id, name]), val => store.setStatus(mid, val)),
+    setRow('1日の語数（最低）', ms.wordsPerDay, [10, 20, 30, 40, 50, 70, 100].map(n => [n, `${n}${unit}`]), val => store.saveMatSettings(mid, { wordsPerDay: Number(val) })),
+    setRow('1日の新しい語（必ず出す数）', ms.newPerDay, [0, 5, 10, 15, 20, 30, 50].map(n => [n, `${n}${unit}`]), val => store.saveMatSettings(mid, { newPerDay: Number(val) })),
     setRow('新しい語の出し方', ms.newStyle, [['quiz', '最初から出題形式で'], ['card', 'カードで覚えてから']], val => store.saveMatSettings(mid, { newStyle: val })),
     setRow('出題の向き', ms.direction, [['en-ja', '英語 → 日本語'], ['ja-en', '日本語 → 英語']], val => store.saveMatSettings(mid, { direction: val })),
     setRow('新しい語の順番', ms.order, [['book', '本の順'], ['random', 'ランダム']], val => store.saveMatSettings(mid, { order: val })),
     m.ranked ? setRow('出題する重要度', ms.minRank || 0, [[0, 'すべて（難単語も）'], [1, '重要まで（＊以上）'], [2, '最重要だけ（＊＊）']], val => store.saveMatSettings(mid, { minRank: Number(val) })) : null,
     h('button', { class: 'set-row', style: { color: 'var(--red)', cursor: 'pointer' }, onclick: async () => {
-      if (!confirm(`「${m.title}」をホームから外しますか？（学習の記録は残ります）`)) return;
-      await store.saveMatSettings(mid, { enabled: false }); toast('ホームから外しました'); go('');
-    } }, 'ホームから外す')));
+      if (!confirm(`「${m.title}」をホームの一覧から外しますか？（学習の記録は残ります）`)) return;
+      await store.setStatus(mid, 'off'); toast('一覧から外しました'); go('');
+    } }, '一覧から外す')));
   return main;
 }
 
