@@ -357,6 +357,7 @@ export function backOf(card, dir = 'en-ja', images = null) {
     for (const d of card.derived) {
       back.append(h('div', { class: 'dv' },
         h('span', { class: 'w' }, d.word, rankMark(d.rank), d.pron ? h('span', { class: 'pron', style: { fontSize: '14px', fontWeight: 400, marginLeft: '8px' } }, `[${d.pron}]`) : null),
+        d.summary ? h('span', { class: 'sum' }, d.summary) : null,
         h('div', { class: 'lines' }, ...(d.lines || []).map(l => h('span', {}, l))),
         illus({ img: d.img, front: d.word }, images, 200),
         d.notes?.length ? h('div', { class: 'sect' }, h('ul', {}, ...d.notes.map(x => h('li', {}, '★ ' + x)))) : null,

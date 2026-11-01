@@ -58,7 +58,8 @@ function fromTeppeki(e, sectionTitles) {
   const no = String(e.no).padStart(4, '0');
   // 挿絵: tp-ill-0026 は見出し語、tp-ill-0026-2 は 2 つめの派生語（derived[1]）の絵
   const ids = e.illustration_ids || (e.illustration_id ? [e.illustration_id] : []);
-  const headImg = ids.find(x => /^tp-ill-\d{4}$/.test(x)) || null;
+  // 新しい JSON は e.img / d.img で絵の名前を直接持つ（同じ絵を数語で共有できる）。前の形は名前の決まりから探す
+  const headImg = e.img !== undefined ? e.img : (ids.find(x => /^tp-ill-\d{4}$/.test(x)) || null);
   return {
     id: `tp-${no}`, m: 'teppeki', deck: `SECTION ${e.section}`, deckNo: e.section, no: e.no,
     front: e.headword, pron: e.pron || '', pos: TP_POS[e.meanings?.[0]?.pos] || e.meanings?.[0]?.pos || '', flags: [],
@@ -67,8 +68,8 @@ function fromTeppeki(e, sectionTitles) {
     examples: (e.examples || []).map(x => ({ en: x.en, ja: x.ja })),
     usage: e.notes || [], colloc: (e.phrases || []).map(p => p.ja ? `${p.en}「${p.ja}」` : p.en),
     derived: (e.derived || []).map((d, k) => ({
-      img: ids.find(x => x === `tp-ill-${no}-${k + 1}`) || null,
-      word: d.word, pos: TP_POS[d.meanings?.[0]?.pos] || d.meanings?.[0]?.pos || '', rank: d.rank ?? 0, pron: d.pron || '',
+      img: d.img !== undefined ? d.img : (ids.find(x => x === `tp-ill-${no}-${k + 1}`) || null),
+      word: d.word, pos: TP_POS[d.meanings?.[0]?.pos] || d.meanings?.[0]?.pos || '', rank: d.rank ?? 0, pron: d.pron || '', summary: d.summary || '',
       meaning: meaningOf(d.meanings), lines: (d.meanings || []).map(lineOf),
       notes: d.notes || [], colloc: (d.phrases || []).map(p => p.ja ? `${p.en}「${p.ja}」` : p.en),
       examples: (d.examples || []).map(x => ({ en: x.en, ja: x.ja })),
