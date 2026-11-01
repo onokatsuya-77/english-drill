@@ -1,5 +1,5 @@
 import { h, clear, toast } from '../dom.js';
-import { normalize, chunk } from '../content.js';
+import { normalize, chunk, IMAGE_CHUNK } from '../content.js';
 import { icon } from './parts.js';
 
 /** 管理: 家族の教材（JSON）を Firestore に登録・更新する */
@@ -22,14 +22,14 @@ export function renderAdmin(store, { go, isAdmin }) {
     const f = e.target.files[0]; if (!f) return;
     clear(status); status.append(h('p', { class: 'small muted' }, `${f.name} を読んでいます…`));
     try {
-      const { material, cards, passages } = normalize(JSON.parse(await f.text()));
+      const { material, cards, passages, images } = normalize(JSON.parse(await f.text()));
       const prog = h('progress', { max: 1, value: 0, style: { width: '100%' } });
       clear(status);
-      status.append(h('p', { style: { fontSize: '14px' } }, `${material.title}: ${cards.length}枚、${material.decks.length} ${material.deckLabel}${passages.length ? `、長文 ${passages.length}本` : ''}`),
+      status.append(h('p', { style: { fontSize: '14px' } }, `${material.title}: ${cards.length}枚、${material.decks.length} ${material.deckLabel}${passages.length ? `、長文 ${passages.length}本` : ''}${images.length ? `、挿絵 ${images.length}枚` : ''}`),
         h('button', { class: 'btn primary block', onclick: async ev => {
           ev.target.disabled = true; status.append(prog);
           try {
-            await store.backend.saveMaterial(material, chunk(cards), chunk(passages, 10), p => { prog.value = p; });
+            await store.backend.saveMaterial(material, chunk(cards), chunk(passages, 10), p => { prog.value = p; }, chunk(images, IMAGE_CHUNK));
             await store.refreshMaterials(); refreshList(); toast('登録しました');
             clear(status); status.append(h('p', { style: { fontSize: '14px', color: 'var(--teal)', fontWeight: 700 } }, `${material.title} を登録しました。`));
           } catch (err) { alert('登録できませんでした: ' + err.message); ev.target.disabled = false; }
@@ -40,7 +40,7 @@ export function renderAdmin(store, { go, isAdmin }) {
   main.append(
     h('section', { class: 'card' },
       h('h2', {}, '家族の教材を登録・更新'),
-      h('p', { style: { fontSize: '13px', lineHeight: 1.6, color: 'var(--ink2)' } }, 'Drive の _試作_ フォルダにある JSON（tg1400_all_0001-1400.json、tg1900_all_0001-1900.json、sokujuku_all_L01-74.json）を選んでください。同じ教材を選ぶと更新されます（学習の記録はそのまま）。'),
+      h('p', { style: { fontSize: '13px', lineHeight: 1.6, color: 'var(--ink2)' } }, 'Drive の _試作_ フォルダにある JSON（tg1400_all_0001-1400.json、tg1900_all_0001-1900.json、sokujuku_all_L01-74.json、teppeki_*.json）を選んでください。同じ教材を選ぶと更新されます（学習の記録はそのまま）。'),
       h('button', { class: 'btn outline block', onclick: () => input.click() }, icon('file', 20), 'JSON を選ぶ'), input, status),
     h('div', { class: 'sec-h' }, h('h2', {}, '登録済みの教材')), list);
   return main;

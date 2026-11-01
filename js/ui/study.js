@@ -3,7 +3,7 @@ import { preview, formatInterval, Rating, State, emptyCard } from '../fsrs.js';
 import { posName } from '../content.js';
 import { pickMode, makeQuestion, checkSpelling, autoRating, cleanMeaning } from '../quiz.js';
 import { canSpeak, speak, stopSpeaking } from '../speech.js';
-import { icon, rings, medal, shortTitle } from './parts.js';
+import { icon, rings, medal, shortTitle, rankMark, illus } from './parts.js';
 
 const LEARN_WINDOW = 30 * 60000; // この時間内に再出題になるカードはセッションの中でもう一度出す
 const MODE_LABEL = { card: ['カード', 'indigo'], choice: ['4択', 'orange'], spell: ['つづり', 'indigo'], cloze: ['穴埋め', 'orange'], listen: ['リスニング', 'teal'] };
@@ -78,14 +78,14 @@ export function renderStudy(store, { go, params }) {
         card.pos ? h('span', { class: 'tag' }, posName(card.pos)) : h('span'),
         canSpeak && !jaEn ? h('button', { class: 'icon-btn', style: { background: 'var(--bg)' }, 'aria-label': '発音を聞く', onclick: () => speak(card.front) }, icon('speaker', 22)) : h('span')),
       h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
-        h('span', { class: 'word' + (jaEn ? ' ja' : card.front.length > 14 ? ' mid' : '') }, jaEn ? card.meaning : card.front),
+        h('span', { class: 'word' + (jaEn ? ' ja' : card.front.length > 14 ? ' mid' : '') }, jaEn ? card.meaning : card.front, jaEn ? null : rankMark(card.rank)),
         !jaEn && card.pron ? h('span', { class: 'pron' }, `[${card.pron}]`) : null));
     const foot = h('div', { class: 'study-foot' });
     main.append(qc, foot);
     let revealed = false;
     const reveal = () => {
       if (revealed) return; revealed = true;
-      qc.append(backOf(card, dir));
+      qc.append(backOf(card, dir, store.images));
       if (jaEn && canSpeak) speak(card.front);
       const st = store.stateOf(card.id) || emptyCard(Date.now());
       const pv = preview(st);
@@ -145,6 +145,7 @@ export function renderStudy(store, { go, params }) {
       foot.append(feedback(correct,
         correct ? '正解！' : `正しくは「${answer}」`,
         listen || q.jaEn ? `${card.front}${card.pron ? `　[${card.pron}]` : ''}　${card.meaning}` : nextText(st, correct)));
+      const im = illus(anyImg(card), store.images, 150); if (im) { im.style.maxHeight = '120px'; im.style.width = 'auto'; im.style.alignSelf = 'center'; qc.append(im); }
       if (listen) play();
     };
     foot.append(h('button', { class: 'btn ghost block', onclick: () => pick(-1) }, 'わからない'));
@@ -175,6 +176,7 @@ export function renderStudy(store, { go, params }) {
       buttons.forEach((b, j) => { b.disabled = true; b.classList.add(q.options[j].correct ? 'right' : j === i ? 'wrong' : 'dim'); });
       blank.textContent = q.answer; blank.style.color = 'var(--tealDeep)'; blank.style.borderColor = 'var(--teal)';
       qc.append(h('div', { class: 'ex' }, h('span', { class: 'en' }, card.front), h('span', { class: 'ja' }, card.meaning)));
+      const im = illus(anyImg(card), store.images, 150); if (im) { im.style.maxHeight = '120px'; im.style.width = 'auto'; qc.append(im); }
       clear(foot);
       const st = await grade(card, correct, false, 'cloze');
       foot.append(feedback(correct, correct ? '正解！' : `正しくは ${q.answer}`, nextText(st, correct)));
@@ -197,9 +199,9 @@ export function renderStudy(store, { go, params }) {
         h('div', { class: 'row-between' }, h('span', { class: 'ask' }, '新しい語です。見て覚えてから書きます'),
           canSpeak ? h('button', { class: 'icon-btn', style: { background: 'var(--bg)' }, 'aria-label': '発音を聞く', onclick: () => speak(card.front) }, icon('speaker', 22)) : null),
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
-          h('span', { class: 'word' + (card.front.length > 14 ? ' mid' : '') }, card.front),
+          h('span', { class: 'word' + (card.front.length > 14 ? ' mid' : '') }, card.front, rankMark(card.rank)),
           card.pron ? h('span', { class: 'pron' }, `[${card.pron}]`) : null),
-        backOf(card, 'en-ja'));
+        backOf(card, 'en-ja', store.images));
       const go2 = () => { q.seen = true; keyHandler = null; clear(main); main.append(header(card, 'spell', true)); showSpell(q); };
       main.append(qc, h('div', { class: 'study-foot' }, h('button', { class: 'btn dark block', style: { height: '60px', fontSize: '17px' }, onclick: go2 }, '書いてみる')));
       if (canSpeak) setTimeout(() => speak(card.front), 250);
@@ -226,6 +228,7 @@ export function renderStudy(store, { go, params }) {
       const correct = checkSpelling(input.value, q.answer);
       input.readOnly = true; input.classList.add(correct ? 'ok' : 'ng');
       if (blank) { blank.textContent = q.token || q.answer; blank.style.color = 'var(--tealDeep)'; }
+      const im = illus(anyImg(card), store.images, 150); if (im) { im.style.maxHeight = '120px'; im.style.width = 'auto'; qc.append(im); }
       clear(foot);
       const st = await grade(card, correct, hints > 1, 'spell');
       foot.append(feedback(correct, correct ? (hints > 1 ? '正解（ヒントあり）' : '正解！') : 'おしい！',
@@ -319,6 +322,9 @@ export function renderStudy(store, { go, params }) {
   return main;
 }
 
+/** 見出し語の絵が無ければ、派生語の絵を使う */
+function anyImg(card) { return card.img ? card : { img: card.derived?.find(d => d.img)?.img || null, front: card.front }; }
+
 function ringWithCheck(fr, all) {
   const el = rings(fr, 168, all ? '今日の目標を3つとも達成' : '今日の目標の達成度');
   if (all) el.insertAdjacentHTML('beforeend', '<path d="M48 56l6 6 11-12" fill="none" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>');
@@ -329,20 +335,34 @@ function rstat(v, unit, k) {
 }
 
 /** カードの裏面（意味・例文・派生語など） */
-export function backOf(card, dir = 'en-ja') {
+export function backOf(card, dir = 'en-ja', images = null) {
   const back = h('div', { class: 'back' });
   if (dir === 'ja-en') {
-    back.append(h('span', { class: 'meaning' }, h('span', { class: 'mark' }, card.front)));
+    back.append(h('span', { class: 'meaning' }, h('span', { class: 'mark' }, card.front), rankMark(card.rank)));
     if (card.pron) back.append(h('span', { class: 'pron' }, `[${card.pron}]`));
   } else back.append(h('span', { class: 'meaning' }, h('span', { class: 'mark' }, card.meaning)));
   if (card.sub?.length) back.append(h('span', { class: 'sub' }, card.sub.join('；')));
+  // 鉄壁: 品詞ごとの意味の行（赤字だけでは足りない情報があるとき）
+  if (card.lines?.length) back.append(h('div', { class: 'lines' }, ...card.lines.map(l => h('span', {}, l))));
+  const pic = illus(card, images); if (pic) back.append(pic);
   for (const ex of (card.examples || []).slice(0, 2)) back.append(h('div', { class: 'ex' }, h('span', { class: 'en' }, ex.en), ex.ja ? h('span', { class: 'ja' }, ex.ja) : null));
   const sect = (label, items) => items?.length ? h('div', { class: 'sect' }, h('b', {}, label), h('ul', {}, ...items.map(x => h('li', {}, x)))) : null;
   const add = el => { if (el) back.append(el); };
-  add(sect('▶', card.usage));
-  add(sect('連語', card.colloc));
-  if (card.derived?.length) back.append(h('div', { class: 'sect' }, h('b', {}, '派生'), ...card.derived.map(d => h('span', { style: { marginRight: '10px' } }, `${d.word} `, h('span', { class: 'muted' }, `${posName(d.pos)} ${d.meaning}`)))));
-  if (card.related?.length) back.append(h('div', { class: 'sect' }, h('ul', {}, ...card.related.map(r => h('li', {}, `${r.mark} ${r.text}`, r.meaning ? h('span', { class: 'muted' }, ` ${r.meaning}`) : null)))));
+  add(sect(card.m === 'teppeki' ? '★' : '▶', card.usage));
+  add(sect(card.m === 'teppeki' ? '◆' : '連語', card.colloc));
+  if (card.derived?.length && card.m === 'teppeki') {
+    // 鉄壁: 派生語も見出し語と同じくらいの情報を持つ
+    for (const d of card.derived) {
+      back.append(h('div', { class: 'dv' },
+        h('span', { class: 'w' }, d.word, rankMark(d.rank), d.pron ? h('span', { class: 'pron', style: { fontSize: '14px', fontWeight: 400, marginLeft: '8px' } }, `[${d.pron}]`) : null),
+        h('div', { class: 'lines' }, ...(d.lines || []).map(l => h('span', {}, l))),
+        illus({ img: d.img, front: d.word }, images, 200),
+        d.notes?.length ? h('div', { class: 'sect' }, h('ul', {}, ...d.notes.map(x => h('li', {}, '★ ' + x)))) : null,
+        d.colloc?.length ? h('div', { class: 'sect' }, h('ul', {}, ...d.colloc.map(x => h('li', {}, '◆ ' + x)))) : null,
+        ...(d.examples || []).slice(0, 1).map(ex => h('div', { class: 'ex' }, h('span', { class: 'en' }, ex.en), ex.ja ? h('span', { class: 'ja' }, ex.ja) : null))));
+    }
+  } else if (card.derived?.length) back.append(h('div', { class: 'sect' }, h('b', {}, '派生'), ...card.derived.map(d => h('span', { style: { marginRight: '10px' } }, `${d.word} `, h('span', { class: 'muted' }, `${posName(d.pos)} ${d.meaning}`)))));
+  if (card.related?.length) back.append(h('div', { class: 'sect' }, h('ul', {}, ...card.related.map(r => h('li', {}, `${r.mark} ${r.text}`, rankMark(r.rank), r.meaning ? h('span', { class: 'muted' }, ` ${r.meaning}`) : null)))));
   if (card.refs?.length) back.append(h('div', { class: 'sect muted small' }, '→ ' + card.refs.join('、')));
   return back;
 }

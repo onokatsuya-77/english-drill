@@ -11,5 +11,21 @@ for (const [f,exp] of [[`${S}/t1400/tg1400_all_0001-1400.json`,1400],[`${S}/t190
   assert.ok(maxBytes < 900*1024);
   assert.ok(cards.every(c=>c.front && c.meaning && c.examples.length));
 }
+// 鉄壁（試作: SECTION 1〜2）
+{
+  const data = JSON.parse(fs.readFileSync(`${S}/tp/teppeki_S01-02.json`, 'utf8'));
+  assert.equal(detectFormat(data), 'teppeki');
+  const { material, cards, images } = normalize(data);
+  assert.equal(material.id, 'teppeki'); assert.ok(material.ranked);
+  assert.equal(cards.length, 47); assert.equal(material.decks.length, 2);
+  assert.equal(material.decks[0].title, 'SECTION 1　重要な・ささいな');
+  assert.ok(cards.every(c => c.front && c.meaning && [0, 1, 2].includes(c.rank)));
+  const rv = cards.find(c => c.front === 'revive');
+  assert.equal(rv.meaning, '生き返らせる；生き返る'); assert.equal(rv.pos, '動'); assert.ok(rv.img && images.some(x => x.id === rv.img));
+  assert.equal(rv.derived[0].word, 'revival'); assert.ok(rv.related.some(r => r.text === 'extinct' && r.rank === 2));
+  const ch = chunk(images, 40); const maxImg = Math.max(...ch.map(c => Buffer.byteLength(JSON.stringify(c))));
+  console.log('teppeki cards', cards.length, 'images', images.length, 'max image chunk KB', (maxImg / 1024).toFixed(0));
+  assert.ok(maxImg < 900 * 1024);
+}
 assert.equal(detectFormat({}), null);
 console.log('content tests passed');

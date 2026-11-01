@@ -83,4 +83,20 @@ assert.equal(store.cards.get(own.material.id).length, 2);
 const noHead = ownFromRows([['dog', '犬'], ['cat', '猫']], { title: 'x', owner: 'p' });
 assert.equal(noHead.cards.length, 2, '見出しが無くても 英語・意味 の順で読める');
 
+// 重要度での絞り込み（鉄壁）
+{
+  const tp = normalize(JSON.parse(fs.readFileSync(`${S}/tp/teppeki_S01-02.json`, 'utf8')));
+  await backend.saveMaterial(tp.material, chunk(tp.cards), [], null, chunk(tp.images, 40));
+  await store.refreshMaterials();
+  assert.ok(store.images.size >= 20, '挿絵が読み込まれる');
+  await store.saveMatSettings('teppeki', { newPerDay: 50 });
+  const all = store.newCandidates('teppeki', 50).length;
+  await store.saveMatSettings('teppeki', { minRank: 2 });
+  const top = store.newCandidates('teppeki', 50);
+  assert.ok(top.length < all && top.every(c => c.rank === 2), '最重要だけ');
+  await store.saveMatSettings('teppeki', { minRank: 1 });
+  assert.ok(store.newCandidates('teppeki', 50).every(c => c.rank >= 1));
+  console.log('teppeki new words: all', all, 'rank2', top.length);
+}
+
 console.log('model tests passed', store.totals());

@@ -19,9 +19,10 @@ export const backend = {
   onAuth(cb) { authCb = cb; setTimeout(() => cb(localStorage.getItem(LS + ':signed') ? user : null), 0); return () => { authCb = null; }; },
   async listMaterials() { return Object.values(load().materials).sort((a, b) => (a.order || 0) - (b.order || 0)); },
   async loadChunks(materialId, kind) { return (load().chunks[`${materialId}/${kind}`] || []).flatMap(c => c.items); },
-  async saveMaterial(material, cardChunks, passageChunks, onProgress) {
+  async saveMaterial(material, cardChunks, passageChunks, onProgress, imageChunks = []) {
     const s = load(); const version = Date.now();
-    s.materials[material.id] = { ...material, version, cardChunks: cardChunks.length, passageChunks: passageChunks.length };
+    s.materials[material.id] = { ...material, version, cardChunks: cardChunks.length, passageChunks: passageChunks.length, imageChunks: imageChunks.length };
+    s.chunks[`${material.id}/images`] = imageChunks.map((items, i) => ({ i, items }));
     s.chunks[`${material.id}/cards`] = cardChunks.map((items, i) => ({ i, items }));
     s.chunks[`${material.id}/passages`] = passageChunks.map((items, i) => ({ i, items }));
     save(s); onProgress?.(1); return version;

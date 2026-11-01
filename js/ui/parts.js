@@ -102,10 +102,10 @@ export function masteryLegend(withNew = true) {
 }
 
 /** 教材の表紙の色と短い名前 */
-const COVERS = { tg1900: '#2B3A8F', tg1400: '#0B6E6A', sj: '#B4410E' };
+const COVERS = { tg1900: '#2B3A8F', tg1400: '#0B6E6A', sj: '#B4410E', teppeki: '#5E3A8C' };
 const OWN_COLORS = ['#4A4F63', '#5E3A8C', '#1F5F8B', '#7A4B2A'];
 export function coverOf(m) {
-  if (COVERS[m.id]) return { color: COVERS[m.id], label: { tg1900: '1900', tg1400: '1400', sj: '速読' }[m.id] };
+  if (COVERS[m.id]) return { color: COVERS[m.id], label: { tg1900: '1900', tg1400: '1400', sj: '速読', teppeki: '鉄壁' }[m.id] };
   let hsh = 0; for (const ch of m.id) hsh = (hsh * 31 + ch.charCodeAt(0)) >>> 0;
   return { color: m.color || OWN_COLORS[hsh % OWN_COLORS.length], label: m.own ? '自作' : (m.title || '').slice(0, 2) };
 }
@@ -114,4 +114,17 @@ export function coverEl(m, w = 46, hgt = 62) {
   return h('div', { class: 'cover', style: { background: c.color, width: w + 'px', height: hgt + 'px' } }, w >= 40 ? c.label : '');
 }
 
-export const shortTitle = t => (t || '').replace('英単語ターゲット', 'ターゲット');
+export const shortTitle = t => (t || '').replace('英単語ターゲット', 'ターゲット').replace('鉄緑会 東大英単語熟語 ', '');
+
+/** 重要度の印（＊＊ 最重要／＊ 重要／なし 難単語） */
+export const RANK_NAME = ['難単語', '重要', '最重要'];
+export function rankMark(r) {
+  if (r == null || r <= 0) return null;
+  return h('span', { class: 'rank', 'aria-label': RANK_NAME[r], title: RANK_NAME[r] }, r >= 2 ? '＊＊' : '＊');
+}
+/** 挿絵（images: id → data URL） */
+export function illus(card, images, maxW = 240) {
+  const src = card?.img && images?.get(card.img);
+  if (!src) return null;
+  return h('img', { class: 'illus', src, alt: `${card.front} の挿絵`, style: { maxWidth: maxW + 'px' } });
+}

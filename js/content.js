@@ -1,6 +1,7 @@
 // 教材 JSON（TARGET 1400/1900、速読英熟語）を共通のカード形式に変換し、Firestore 用に分割する。
 
 export const CHUNK_SIZE = 150;
+export const IMAGE_CHUNK = 40; // 挿絵は 40 枚ずつ（1 文書 1MB の上限に余裕を持たせる）
 
 const POS_NAME = { '動': '動詞', '名': '名詞', '形': '形容詞', '副': '副詞', '前': '前置詞', '接': '接続詞', '代': '代名詞', '助': '助動詞', '間': '間投詞' };
 
@@ -11,6 +12,7 @@ export function detectFormat(data) {
     if (data[0].id.startsWith('tg1900-')) return 'tg1900';
   }
   if (data && Array.isArray(data.cards) && Array.isArray(data.lessons) && data.cards[0]?.id?.startsWith('sj-')) return 'sj';
+  if (data && data.format === 'teppeki' && Array.isArray(data.entries)) return 'teppeki';
   return null;
 }
 
@@ -44,15 +46,57 @@ function fromSokujuku(c) {
   };
 }
 
+const TP_POS = { '他': '動', '自': '動', '動': '動', '名': '名', '形': '形', '副': '副', '前': '前', '接': '接', '代': '代', '助': '助', '句': '熟語' };
+const meaningOf = ms => (ms || []).map(m => m.red || m.text).filter(Boolean).join('；');
+const lineOf = m => (m.pos ? `〔${m.pos}〕` : '') + m.text;
+const squash = s => (s || '').replace(/[，,；;\s]/g, '');
+/** 赤字だけでは足りないとき（「～を」や①②、補足がある、品詞が複数）だけ、品詞ごとの行を出す */
+const linesOf = ms => ((ms || []).length > 1 || (ms || []).some(m => squash(m.text) !== squash(m.red))) ? (ms || []).map(lineOf) : [];
+
+/** 鉄壁の 1 見出し語（派生語つき）を共通カードに */
+function fromTeppeki(e, sectionTitles) {
+  const no = String(e.no).padStart(4, '0');
+  // 挿絵: tp-ill-0026 は見出し語、tp-ill-0026-2 は 2 つめの派生語（derived[1]）の絵
+  const ids = e.illustration_ids || (e.illustration_id ? [e.illustration_id] : []);
+  const headImg = ids.find(x => /^tp-ill-\d{4}$/.test(x)) || null;
+  return {
+    id: `tp-${no}`, m: 'teppeki', deck: `SECTION ${e.section}`, deckNo: e.section, no: e.no,
+    front: e.headword, pron: e.pron || '', pos: TP_POS[e.meanings?.[0]?.pos] || e.meanings?.[0]?.pos || '', flags: [],
+    rank: e.rank ?? 0, group: e.group || null,
+    meaning: meaningOf(e.meanings), sub: [], lines: linesOf(e.meanings),
+    examples: (e.examples || []).map(x => ({ en: x.en, ja: x.ja })),
+    usage: e.notes || [], colloc: (e.phrases || []).map(p => p.ja ? `${p.en}「${p.ja}」` : p.en),
+    derived: (e.derived || []).map((d, k) => ({
+      img: ids.find(x => x === `tp-ill-${no}-${k + 1}`) || null,
+      word: d.word, pos: TP_POS[d.meanings?.[0]?.pos] || d.meanings?.[0]?.pos || '', rank: d.rank ?? 0, pron: d.pron || '',
+      meaning: meaningOf(d.meanings), lines: (d.meanings || []).map(lineOf),
+      notes: d.notes || [], colloc: (d.phrases || []).map(p => p.ja ? `${p.en}「${p.ja}」` : p.en),
+      examples: (d.examples || []).map(x => ({ en: x.en, ja: x.ja })),
+      related: (d.related || []).map(relOf),
+    })),
+    related: (e.related || []).map(relOf),
+    notes: [], refs: [], page: e.page || null, audio: null,
+    img: headImg,
+  };
+}
+function relOf(r) {
+  return { mark: '□', text: r.word, rank: r.rank ?? 0, pron: r.pron || '', meaning: `${r.pos ? `〔${r.pos}〕` : ''}${r.meaning || ''}${r.ref ? ` →p.${r.ref}` : ''}` };
+}
+
 /**
- * 教材 JSON を { material, cards, passages } に変換する。
+ * 教材 JSON を { material, cards, passages, images } に変換する。
  * material: { id, title, kind, decks:[{id,title,count}], cardCount }
  */
 export function normalize(data) {
   const fmt = detectFormat(data);
-  if (!fmt) throw new Error('教材の形式を判定できません（TARGET 1400/1900 または速読英熟語の JSON を選んでください）');
-  let cards, material, passages = [];
-  if (fmt === 'tg1400' || fmt === 'tg1900') {
+  if (!fmt) throw new Error('教材の形式を判定できません（TARGET 1400/1900、速読英熟語、鉄壁の JSON を選んでください）');
+  let cards, material, passages = [], images = [];
+  if (fmt === 'teppeki') {
+    const titles = Object.fromEntries((data.sections || []).map(s => [s.no, s.title]));
+    cards = data.entries.map(e => fromTeppeki(e, titles));
+    material = { id: 'teppeki', title: data.title || '鉄緑会 東大英単語熟語 鉄壁', kind: 'words', deckLabel: 'SECTION', ranked: true, deckTitles: titles };
+    images = Object.entries(data.images || {}).map(([id, src]) => ({ id, src }));
+  } else if (fmt === 'tg1400' || fmt === 'tg1900') {
     cards = data.map(c => fromTarget(c, fmt));
     material = { id: fmt, title: fmt === 'tg1400' ? '英単語ターゲット1400' : '英単語ターゲット1900', kind: 'words', deckLabel: 'Section' };
   } else {
@@ -68,13 +112,18 @@ export function normalize(data) {
   const decks = [];
   for (const c of cards) {
     let d = decks[decks.length - 1];
-    if (!d || d.no !== c.deckNo) { d = { id: `${material.id}:${c.deckNo}`, no: c.deckNo, title: c.deck, count: 0 }; decks.push(d); }
+    if (!d || d.no !== c.deckNo) {
+      const t = material.deckTitles?.[c.deckNo];
+      d = { id: `${material.id}:${c.deckNo}`, no: c.deckNo, title: t ? `${c.deck}　${t}` : c.deck, count: 0 }; decks.push(d);
+    }
     d.count += 1;
   }
+  delete material.deckTitles;
   material.decks = decks;
   material.cardCount = cards.length;
   material.passageCount = passages.length;
-  return { material, cards, passages };
+  material.imageCount = images.length;
+  return { material, cards, passages, images };
 }
 
 /** カード配列を CHUNK_SIZE ごとに分割 */

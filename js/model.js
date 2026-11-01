@@ -16,7 +16,7 @@ export function dayKey(t = Date.now()) {
 export function dayStart(t = Date.now()) { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); }
 
 export const DEFAULT_SETTINGS = { goals: { minutes: 30, answers: 100 }, materials: {} };
-export const DEFAULT_MAT = { enabled: true, newPerDay: 10, direction: 'en-ja', order: 'book', mode: 'mix', newStyle: 'quiz' };
+export const DEFAULT_MAT = { enabled: true, newPerDay: 10, direction: 'en-ja', order: 'book', mode: 'mix', newStyle: 'quiz', minRank: 0 };
 export const MODES = [['card', 'カード'], ['choice', '4択'], ['spell', 'つづり'], ['cloze', '穴埋め'], ['listen', 'リスニング'], ['mix', 'ミックス']];
 
 /** 1 枚の覚え具合: new（未学習）/ shaky（あやしい）/ known（覚えた）/ solid（定着） */
@@ -50,6 +50,7 @@ export class Store extends EventTarget {
     this.days = []; this.unsubs = [];
     this.loading = ''; this.ready = false; this.passages = new Map();
     this.isAdmin = false; this.denied = false;
+    this.images = new Map(); // 挿絵 id → data URL
   }
   emit() { this.dispatchEvent(new Event('change')); }
 
@@ -141,6 +142,10 @@ export class Store extends EventTarget {
         ? await this.backend.loadOwnChunks(this.user.uid, m.id, m.cardChunks, m.version)
         : await this.backend.loadChunks(m.id, 'cards', m.cardChunks, m.version);
       this.cards.set(m.id, cards); cards.forEach(c => this.cardIndex.set(c.id, c));
+      if (m.imageChunks && !m.own) {
+        try { (await this.backend.loadChunks(m.id, 'images', m.imageChunks, m.version)).forEach(x => this.images.set(x.id, x.src)); }
+        catch (e) { console.warn('images', e); }
+      }
     }
   }
   async loadPassages(materialId) {
@@ -187,7 +192,7 @@ export class Store extends EventTarget {
     const out = [];
     if (limit <= 0) return out;
     const ms = this.matSettings(mid);
-    let list = (this.cards.get(mid) || []).filter(c => !this.states.has(c.id) && (deckNo == null || c.deckNo === deckNo));
+    let list = (this.cards.get(mid) || []).filter(c => !this.states.has(c.id) && (deckNo == null || c.deckNo === deckNo) && (c.rank == null || c.rank >= (ms.minRank || 0)));
     if (ms.order === 'random') list = seededShuffle(list, dayKey() + mid);
     for (const c of list) { out.push(c); if (out.length >= limit) break; }
     return out;

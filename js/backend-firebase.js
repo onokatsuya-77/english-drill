@@ -67,11 +67,11 @@ export const backend = {
     docs.map(d => d.data()).sort((a, b) => a.i - b.i).forEach(d => out.push(...d.items));
     return out;
   },
-  async saveMaterial(material, cardChunks, passageChunks, onProgress) {
+  async saveMaterial(material, cardChunks, passageChunks, onProgress, imageChunks = []) {
     const version = Date.now();
-    const total = cardChunks.length + passageChunks.length + 1; let done = 0;
+    const total = cardChunks.length + passageChunks.length + imageChunks.length + 1; let done = 0;
     // 既存の chunk を消す（数が減った場合に備えて）
-    for (const kind of ['cards', 'passages']) {
+    for (const kind of ['cards', 'passages', 'images']) {
       const s = await getDocs(collection(db, 'materials', material.id, kind));
       let b = writeBatch(db), n = 0;
       for (const d of s.docs) { b.delete(d.ref); if (++n === 400) { await b.commit(); b = writeBatch(db); n = 0; } }
@@ -85,7 +85,8 @@ export const backend = {
     };
     await write('cards', cardChunks);
     await write('passages', passageChunks);
-    await setDoc(doc(db, 'materials', material.id), { ...material, version, cardChunks: cardChunks.length, passageChunks: passageChunks.length, updatedAt: serverTimestamp() });
+    await write('images', imageChunks);
+    await setDoc(doc(db, 'materials', material.id), { ...material, version, cardChunks: cardChunks.length, passageChunks: passageChunks.length, imageChunks: imageChunks.length, updatedAt: serverTimestamp() });
     onProgress?.(1);
     return version;
   },

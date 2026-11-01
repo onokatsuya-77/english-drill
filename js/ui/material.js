@@ -117,6 +117,7 @@ export function renderMaterial(store, { go, params }) {
     setRow('新しい語の出し方', ms.newStyle, [['quiz', '最初から出題形式で'], ['card', 'カードで覚えてから']], val => store.saveMatSettings(mid, { newStyle: val })),
     setRow('出題の向き', ms.direction, [['en-ja', '英語 → 日本語'], ['ja-en', '日本語 → 英語']], val => store.saveMatSettings(mid, { direction: val })),
     setRow('新しい語の順番', ms.order, [['book', '本の順'], ['random', 'ランダム']], val => store.saveMatSettings(mid, { order: val })),
+    m.ranked ? setRow('出題する重要度', ms.minRank || 0, [[0, 'すべて（難単語も）'], [1, '重要まで（＊以上）'], [2, '最重要だけ（＊＊）']], val => store.saveMatSettings(mid, { minRank: Number(val) })) : null,
     h('button', { class: 'set-row', style: { color: 'var(--red)', cursor: 'pointer' }, onclick: async () => {
       if (!confirm(`「${m.title}」をホームから外しますか？（学習の記録は残ります）`)) return;
       await store.saveMatSettings(mid, { enabled: false }); toast('ホームから外しました'); go('');
