@@ -1,6 +1,6 @@
 // Service Worker: アプリ本体と Firebase SDK を端末に保存し、オフラインでも開けるようにする。
 // 公開するたびに VERSION を上げると古いキャッシュが入れ替わる。
-const VERSION = 'ed-0.2.2';
+const VERSION = 'ed-0.2.3';
 const APP_FILES = ['./', './index.html', './manifest.webmanifest', './css/app.css',
   './js/app.js', './js/config.js', './js/dom.js', './js/fsrs.js', './js/model.js', './js/content.js', './js/quiz.js', './js/speech.js',
   './js/backend-firebase.js', './js/backend-mock.js',
@@ -9,7 +9,7 @@ const APP_FILES = ['./', './index.html', './manifest.webmanifest', './css/app.cs
   './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(APP_FILES)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(VERSION).then(c => c.addAll(APP_FILES.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k)))).then(() => self.clients.claim()));

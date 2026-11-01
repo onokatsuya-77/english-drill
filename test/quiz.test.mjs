@@ -51,10 +51,14 @@ for (const c of sj.slice(0, 200)) { const qz = applicableModes(c, sj).includes('
 // 形式の選び方
 assert.equal(pickMode(cmp, 'choice', true, tg, {}, Math.random, 'card'), 'card', '設定でカードで覚えてからにできる');
 assert.equal(pickMode(cmp, 'choice', true, tg), 'choice', '既定では新しい語も選んだ形式で出す');
-assert.equal(pickMode(cmp, 'spell', true, tg, {}, Math.random, 'quiz') !== 'spell', true, '知らない語のつづりは出さない');
+assert.equal(pickMode(cmp, 'spell', true, tg, {}, Math.random, 'quiz'), 'spell', 'つづりを選んだら初めての語もつづり（見て覚えてから書く）');
+for (let i = 0; i < 30; i++) assert.notEqual(pickMode(cmp, 'mix', true, tg, { speech: true }, Math.random, 'quiz'), 'spell', 'ミックスでは初めての語につづりを出さない');
 for (let i = 0; i < 30; i++) assert.notEqual(pickMode(cmp, 'mix', true, tg, { speech: true }, Math.random, 'quiz'), 'card', 'ミックスでも新しい語をカードにしない');
 assert.equal(pickMode(cmp, 'spell', false, tg), 'spell');
-assert.equal(pickMode(sj[0], 'spell', false, sj), sj[0].front.includes(' ') ? 'choice' : 'spell', '熟語はつづりの代わりに4択');
+{ const withEx = sj.find(c => !isSingleWord(c.front) && findInExamples(c));
+  assert.equal(pickMode(withEx, 'spell', false, sj), 'spell', '熟語も例文があればつづり');
+  const qs = makeQuestion(withEx, 'spell', sj); assert.ok(qs.phrase); assert.equal(qs.answer, findInExamples(withEx).token);
+  console.log('idiom spell example:', withEx.front, '→', qs.answer); }
 assert.equal(pickMode(cmp, 'listen', false, tg, { speech: false }), 'choice', '読み上げが無い端末では4択');
 
 // 採点

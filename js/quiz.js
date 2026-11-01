@@ -87,7 +87,7 @@ export function applicableModes(card, pool, { speech = false } = {}) {
   const modes = ['card'];
   const withMeaning = pool.filter(c => c.meaning).length;
   if (card.meaning && withMeaning >= 4) modes.push('choice');
-  if (isSingleWord(card.front) && card.front.length <= 24) modes.push('spell');
+  if ((isSingleWord(card.front) && card.front.length <= 24) || findInExamples(card)) modes.push('spell');
   if (pool.length >= 4 && findInExamples(card)) modes.push('cloze');
   if (speech && card.meaning && withMeaning >= 4 && /[A-Za-z]/.test(card.front)) modes.push('listen');
   return modes;
@@ -96,12 +96,13 @@ export function applicableModes(card, pool, { speech = false } = {}) {
 /**
  * 実際に出す形式を決める。
  * newStyle: 'card' … 初めて出る語はカードで覚えてから（2回目から選んだ形式）
- *           'quiz' … 初めて出る語も選んだ形式で出す（つづりは知らない語には難しいので4択にする）
+ *           'quiz' … 初めて出る語も選んだ形式で出す（つづりは、語を見て覚えてから書く）
  */
 export function pickMode(card, wanted, isNew, pool, opts = {}, rnd = Math.random, newStyle = 'quiz') {
   if (isNew && newStyle !== 'quiz') return 'card';
   let ok = applicableModes(card, pool, opts);
-  if (isNew) ok = ok.filter(m => m !== 'spell' && (wanted === 'card' || m !== 'card'));
+  // ミックスでは、初めての語にカードとつづりは出さない（つづりを選んだときは、見て覚えてから書く）
+  if (isNew && wanted === 'mix') ok = ok.filter(m => m !== 'spell' && m !== 'card');
   if (!ok.length) return 'card';
   if (wanted === 'mix') return ok[Math.floor(rnd() * ok.length)];
   if (ok.includes(wanted)) return wanted;
@@ -132,8 +133,9 @@ export function makeQuestion(card, mode, pool, { direction = 'en-ja' } = {}, rnd
   }
   if (mode === 'spell') {
     const hit = findInExamples(card);
+    const phrase = !isSingleWord(card.front);   // 熟語は、例文の空欄に入る語を書く
     return {
-      mode, card, answer: card.front.trim(),
+      mode, card, phrase, answer: phrase ? hit.token : card.front.trim(),
       before: hit ? hit.ex.en.slice(0, hit.index) : null, after: hit ? hit.ex.en.slice(hit.index + hit.token.length) : null,
       token: hit ? hit.token : null, ja: hit ? hit.ex.ja : null,
     };

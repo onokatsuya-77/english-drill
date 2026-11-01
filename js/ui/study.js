@@ -46,6 +46,7 @@ export function renderStudy(store, { go, params }) {
     if (isNew) s.newIds.add(card.id);
     const mode = pickMode(card, ms.mode, isNew, pool, { speech: canSpeak }, Math.random, ms.newStyle);
     const q = makeQuestion(card, mode, pool, { direction: dir });
+    q.isNew = isNew;
     s.shownAt = Date.now();
     main.append(header(card, mode, isNew));
     ({ card: showCard, choice: showChoice, listen: showChoice, cloze: showCloze, spell: showSpell }[q.mode] || showCard)(q);
@@ -190,13 +191,28 @@ export function renderStudy(store, { go, params }) {
   // ---- つづり ----
   function showSpell(q) {
     const card = q.card;
+    if (q.isNew && !q.seen) {
+      // 初めての語: まず見て覚える
+      const qc = h('article', { class: 'qcard' },
+        h('div', { class: 'row-between' }, h('span', { class: 'ask' }, '新しい語です。見て覚えてから書きます'),
+          canSpeak ? h('button', { class: 'icon-btn', style: { background: 'var(--bg)' }, 'aria-label': '発音を聞く', onclick: () => speak(card.front) }, icon('speaker', 22)) : null),
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
+          h('span', { class: 'word' + (card.front.length > 14 ? ' mid' : '') }, card.front),
+          card.pron ? h('span', { class: 'pron' }, `[${card.pron}]`) : null),
+        backOf(card, 'en-ja'));
+      const go2 = () => { q.seen = true; keyHandler = null; clear(main); main.append(header(card, 'spell', true)); showSpell(q); };
+      main.append(qc, h('div', { class: 'study-foot' }, h('button', { class: 'btn dark block', style: { height: '60px', fontSize: '17px' }, onclick: go2 }, '書いてみる')));
+      if (canSpeak) setTimeout(() => speak(card.front), 250);
+      keyHandler = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go2(); } };
+      return;
+    }
     let hints = 1, checked = false;
     const hintEl = h('b', { style: { color: 'var(--ink)', letterSpacing: '.18em' } });
     const drawHint = () => { hintEl.textContent = q.answer.split('').map((ch, i) => (i < hints || !/[A-Za-z]/.test(ch) ? ch : '_')).join(''); };
     drawHint();
     const blank = q.before != null ? h('span', { class: 'blank', style: { minWidth: '84px' } }, ' ') : null;
     const qc = h('section', { class: 'qcard' },
-      h('div', { class: 'row-between' }, h('span', { class: 'ask' }, '英語で書いてください'), card.pos ? h('span', { class: 'tag' }, posName(card.pos)) : null),
+      h('div', { class: 'row-between' }, h('span', { class: 'ask' }, q.phrase ? '空欄に入る語を書いてください' : '英語で書いてください'), card.pos ? h('span', { class: 'tag' }, posName(card.pos)) : null),
       h('span', { class: 'word ja', style: { fontSize: '30px' } }, cleanMeaning(card.meaning)),
       q.before != null ? h('div', { class: 'ex' }, h('span', { class: 'en' }, q.before, blank, q.after), q.ja ? h('span', { class: 'ja' }, q.ja) : null) : null);
     const input = h('input', { id: 'spell', class: 'spell-input', type: 'text', autocomplete: 'off', autocapitalize: 'off', autocorrect: 'off', spellcheck: false, enterkeyhint: 'done' });
@@ -213,7 +229,7 @@ export function renderStudy(store, { go, params }) {
       clear(foot);
       const st = await grade(card, correct, hints > 1, 'spell');
       foot.append(feedback(correct, correct ? (hints > 1 ? '正解（ヒントあり）' : '正解！') : 'おしい！',
-        `正しいつづり ${q.answer}${card.pron ? `　[${card.pron}]` : ''}`));
+        q.phrase ? `正しくは ${q.answer}　（${card.front}）` : `正しいつづり ${q.answer}${card.pron ? `　[${card.pron}]` : ''}`));
       if (canSpeak) speak(card.front);
       foot.querySelector('.btn')?.focus();
     };

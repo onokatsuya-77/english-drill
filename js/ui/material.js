@@ -51,8 +51,9 @@ export function renderMaterial(store, { go, params }) {
     h('div', { class: 'grid3' }, tile('復習', c.review), tile('新しい語', c.newLeft), tile('目安', c.total ? minutes : 0, '分')),
     h('div', { class: 'field' }, h('span', { style: { fontSize: '13px', fontWeight: 600, color: 'var(--ink2)' } }, '出題形式'), modeChips,
       h('span', { class: 'small muted', style: { lineHeight: 1.6 } }, ms.mode === 'card' ? '答えを見て、覚えていたかを自分で評価します。'
-        : ms.newStyle === 'quiz' ? '初めて出る語も、この形式で出ます（つづりは4択になります）。'
-          : '初めて出る語は、まずカードで覚えます。同じ回の2回目から、この形式で出ます。')),
+        : (ms.newStyle === 'quiz' ? (ms.mode === 'spell' ? '初めて出る語は、見て覚えてから書きます。' : '初めて出る語も、この形式で出ます。')
+          : '初めて出る語は、まずカードで覚えます。同じ回の2回目から、この形式で出ます。')
+          + (ms.mode === 'spell' && m.kind === 'idioms' ? '熟語は、例文の空欄に入る語を書きます。' : ''))),
     c.total
       ? h('a', { class: 'btn primary block', href: `#/study/${mid}/today` }, '今日の学習を始める', icon('arrow', 20, 2.2))
       : h('div', { class: 'btn outline block', style: { cursor: 'default' } }, '今日の分はおわりました'),
