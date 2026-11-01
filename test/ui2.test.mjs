@@ -1,0 +1,17 @@
+import { chromium } from '/opt/npm-tools/node_modules/playwright/index.mjs';
+const S='/tmp/claude-0/-home-claude/d0c14157-09da-53dc-bb1a-3f3301bbbdec/scratchpad';
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 420, height: 860 }, deviceScaleFactor: 2 });
+const errors = []; page.on('pageerror', e => errors.push('pageerror: ' + e.message)); page.on('console', m => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
+page.on('dialog', async d => d.accept('勝也'));
+await page.goto('http://localhost:8765/index.html?mock=1'); await page.waitForTimeout(400);
+await page.click('text=Google でログイン'); await page.waitForTimeout(300); await page.click('text=学習者を追加'); await page.waitForTimeout(400);
+await page.goto('http://localhost:8765/index.html?mock=1#/admin'); await page.waitForTimeout(300);
+await page.setInputFiles('input[type=file]', `${S}/t1900/tg1900_all_0001-1900.json`); await page.waitForTimeout(800); await page.click('text=登録する'); await page.waitForTimeout(800);
+await page.goto('http://localhost:8765/index.html?mock=1#/study'); await page.waitForTimeout(500);
+await page.keyboard.press('Space'); await page.waitForTimeout(300);
+await page.screenshot({ path: `${S}/ui_13_tg_back.png`, fullPage: true });
+await page.keyboard.press('3'); await page.waitForTimeout(200); await page.keyboard.press('Space'); await page.waitForTimeout(200);
+const txt = await page.textContent('.back'); console.log('back has null?', txt.includes('null'));
+console.log('errors:', errors);
+await browser.close();

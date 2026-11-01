@@ -1,0 +1,28 @@
+// Store のロジックをモックのデータ層で確かめる（localStorage を簡易実装）
+globalThis.localStorage = { _m:{}, getItem(k){return this._m[k]??null}, setItem(k,v){this._m[k]=String(v)}, removeItem(k){delete this._m[k]} };
+globalThis.Event = class { constructor(t){this.type=t} };
+globalThis.EventTarget = class { addEventListener(){} dispatchEvent(){} };
+const { backend } = await import('../js/backend-mock.js');
+const { Store, earnedBadges, dayKey } = await import('../js/model.js');
+const { normalize, chunk } = await import('../js/content.js');
+const { Rating } = await import('../js/fsrs.js');
+import fs from 'node:fs'; import assert from 'node:assert/strict';
+const data=JSON.parse(fs.readFileSync('/tmp/claude-0/-home-claude/d0c14157-09da-53dc-bb1a-3f3301bbbdec/scratchpad/sj/sj_lessons01-74.json','utf8'));
+const { material, cards, passages } = normalize(data);
+await backend.saveMaterial(material, chunk(cards), chunk(passages,10));
+await backend.signIn();
+const store = new Store(backend); await store.start(); await new Promise(r=>setTimeout(r,20));
+assert.equal(store.materials.length,1);
+await store.createProfile('テスト');
+assert.ok(store.profile); assert.equal(store.cards.get('sj').length,1084);
+let q=store.buildQueue(); assert.equal(q.length,10); assert.equal(q[0].id,'sj-i0001');
+let now=Date.now();
+for (const c of q) await store.review(c, Rating.Good, 3000, now);
+assert.equal(store.today().newCards,10); assert.equal(store.today().reviews,10);
+assert.equal(store.queueCounts(now).newLeft,0);
+q=store.buildQueue(now+11*60000); assert.equal(q.length,10,'learning cards due after 10 min');
+for (const c of q) await store.review(c, Rating.Good, 2000, now+11*60000);
+const p=store.progress('sj'); assert.equal(p.counts.young+p.counts.mature,10); assert.equal(p.counts.new,1074);
+assert.equal(store.streak(),1); assert.deepEqual(earnedBadges(store),['first']);
+const pass=await store.loadPassages('sj'); assert.equal(pass.length,74);
+console.log('model tests passed', store.totals());

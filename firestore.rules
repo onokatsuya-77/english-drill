@@ -1,0 +1,37 @@
+rules_version = '2';
+// Firebase コンソールの Firestore →「ルール」に貼り付けて「公開」する。
+// ADMIN_EMAIL を管理者の Google アカウントのメールアドレスに書き換えてから貼ること
+// （公開リポジトリにメールアドレスを載せないため、ここには仮の値を入れている）。
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isAdmin() {
+      return signedIn() && request.auth.token.email_verified == true
+        && request.auth.token.email in ['ADMIN_EMAIL'];
+    }
+
+    // 管理者かどうかの確認用（アプリが読めるかどうかを試す。文書は作らなくてよい）
+    match /config/{docId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // 教材: ログインした人は読める。登録・更新は管理者だけ。
+    match /materials/{materialId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+      match /{sub}/{docId} {
+        allow read: if signedIn();
+        allow write: if isAdmin();
+      }
+    }
+
+    // 利用者のデータ: 本人だけが読み書きできる。
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+      match /{document=**} {
+        allow read, write: if signedIn() && request.auth.uid == uid;
+      }
+    }
+  }
+}
