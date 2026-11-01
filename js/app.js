@@ -1,5 +1,5 @@
 // 画面の切り替えと共通の枠
-import { h, clear } from './dom.js';
+import { h, clear, toast } from './dom.js';
 import { Store } from './model.js';
 import { APP_VERSION } from './config.js';
 import { icon } from './ui/parts.js';
@@ -97,4 +97,13 @@ store.addEventListener('change', () => {
 window.addEventListener('hashchange', render);
 await store.start();
 render();
-if ('serviceWorker' in navigator && !useMock && location.protocol === 'https:') navigator.serviceWorker.register('./sw.js').catch(e => console.warn('sw', e));
+if ('serviceWorker' in navigator && !useMock && location.protocol === 'https:') {
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloaded) return;
+    if (current?.sticky) { toast('新しい版があります。学習が終わったら開き直してください'); return; }
+    reloaded = true; location.reload();
+  });
+  navigator.serviceWorker.register('./sw.js').then(r => r.update()).catch(e => console.warn('sw', e));
+}

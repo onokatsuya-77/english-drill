@@ -98,7 +98,7 @@ export function applicableModes(card, pool, { speech = false } = {}) {
  * newStyle: 'card' … 初めて出る語はカードで覚えてから（2回目から選んだ形式）
  *           'quiz' … 初めて出る語も選んだ形式で出す（つづりは知らない語には難しいので4択にする）
  */
-export function pickMode(card, wanted, isNew, pool, opts = {}, rnd = Math.random, newStyle = 'card') {
+export function pickMode(card, wanted, isNew, pool, opts = {}, rnd = Math.random, newStyle = 'quiz') {
   if (isNew && newStyle !== 'quiz') return 'card';
   let ok = applicableModes(card, pool, opts);
   if (isNew) ok = ok.filter(m => m !== 'spell' && (wanted === 'card' || m !== 'card'));

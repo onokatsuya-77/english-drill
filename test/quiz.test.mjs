@@ -49,8 +49,8 @@ assert.equal(jaEn.prompt, cmp.meaning); assert.ok(jaEn.options.some(o => o.corre
 for (const c of sj.slice(0, 200)) { const qz = applicableModes(c, sj).includes('cloze') ? makeQuestion(c, 'cloze', sj, {}, rnd) : null; if (qz) assert.equal(qz.options.filter(o => o.correct).length, 1); }
 
 // 形式の選び方
-assert.equal(pickMode(cmp, 'choice', true, tg), 'card', '新しい語はカードで覚える');
-assert.equal(pickMode(cmp, 'choice', true, tg, {}, Math.random, 'quiz'), 'choice', '設定で新しい語も4択に');
+assert.equal(pickMode(cmp, 'choice', true, tg, {}, Math.random, 'card'), 'card', '設定でカードで覚えてからにできる');
+assert.equal(pickMode(cmp, 'choice', true, tg), 'choice', '既定では新しい語も選んだ形式で出す');
 assert.equal(pickMode(cmp, 'spell', true, tg, {}, Math.random, 'quiz') !== 'spell', true, '知らない語のつづりは出さない');
 for (let i = 0; i < 30; i++) assert.notEqual(pickMode(cmp, 'mix', true, tg, { speech: true }, Math.random, 'quiz'), 'card', 'ミックスでも新しい語をカードにしない');
 assert.equal(pickMode(cmp, 'spell', false, tg), 'spell');

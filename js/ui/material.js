@@ -113,7 +113,7 @@ export function renderMaterial(store, { go, params }) {
   main.append(h('div', { class: 'sec-h' }, h('h2', {}, 'この教材の設定')));
   main.append(h('div', { class: 'list' },
     setRow('1日の新しい語', ms.newPerDay, [0, 5, 10, 15, 20, 30, 50].map(n => [n, `${n}${unit}`]), val => store.saveMatSettings(mid, { newPerDay: Number(val) })),
-    setRow('新しい語の出し方', ms.newStyle, [['card', 'カードで覚えてから'], ['quiz', '最初から出題形式で']], val => store.saveMatSettings(mid, { newStyle: val })),
+    setRow('新しい語の出し方', ms.newStyle, [['quiz', '最初から出題形式で'], ['card', 'カードで覚えてから']], val => store.saveMatSettings(mid, { newStyle: val })),
     setRow('出題の向き', ms.direction, [['en-ja', '英語 → 日本語'], ['ja-en', '日本語 → 英語']], val => store.saveMatSettings(mid, { direction: val })),
     setRow('新しい語の順番', ms.order, [['book', '本の順'], ['random', 'ランダム']], val => store.saveMatSettings(mid, { order: val })),
     h('button', { class: 'set-row', style: { color: 'var(--red)', cursor: 'pointer' }, onclick: async () => {
