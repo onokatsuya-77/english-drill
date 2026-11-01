@@ -27,5 +27,22 @@ for (const [f,exp] of [[`${S}/t1400/tg1400_all_0001-1400.json`,1400],[`${S}/t190
   console.log('teppeki cards', cards.length, 'images', images.length, 'max image chunk KB', (maxImg / 1024).toFixed(0));
   assert.ok(maxImg < 900 * 1024);
 }
+// 鉄壁（SECTION 1〜12）: 多義語の要約、派生語の挿絵、共有の図、カード 1 枚の大きさ
+{
+  const data = JSON.parse(fs.readFileSync(`${S}/tp/teppeki_S01-12.json`, 'utf8'));
+  const { material, cards, images } = normalize(data);
+  assert.equal(cards.length, 435); assert.equal(material.decks.length, 12);
+  assert.ok(cards.every(c => c.front && c.meaning && [0, 1, 2].includes(c.rank)));
+  const at = cards.find(c => c.front === 'attend');
+  assert.equal(at.summary, '①出席 ②注意 to'); assert.equal(at.examples[0].en, "I attended my friend's wedding last week.", '取り消し線の to は外す');
+  assert.equal(cards.find(c => c.front === 'company').derived.find(d => d.word === 'accompany').img, 'tp-ill-0434-1');
+  assert.ok(['budget', 'purchase', 'debt', 'bankrupt'].every(w => cards.find(c => c.front === w).img), '流れの図を 4 語で共有');
+  assert.ok(cards.find(c => c.front === 'aim').lines.some(l => l.startsWith('〔自他〕')));
+  assert.ok(cards.filter(c => c.img).every(c => images.some(x => x.id === c.img)));
+  const ch = chunk(cards); const maxBytes = Math.max(...ch.map(c => Buffer.byteLength(JSON.stringify(c))));
+  const ich = chunk(images, 40); const maxImg = Math.max(...ich.map(c => Buffer.byteLength(JSON.stringify(c))));
+  console.log('teppeki S1-12 cards', cards.length, 'images', images.length, 'max card chunk KB', (maxBytes / 1024).toFixed(0), 'max image chunk KB', (maxImg / 1024).toFixed(0));
+  assert.ok(maxBytes < 900 * 1024 && maxImg < 900 * 1024);
+}
 assert.equal(detectFormat({}), null);
 console.log('content tests passed');

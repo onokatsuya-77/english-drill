@@ -342,10 +342,12 @@ export function backOf(card, dir = 'en-ja', images = null) {
     if (card.pron) back.append(h('span', { class: 'pron' }, `[${card.pron}]`));
   } else back.append(h('span', { class: 'meaning' }, h('span', { class: 'mark' }, card.meaning)));
   if (card.sub?.length) back.append(h('span', { class: 'sub' }, card.sub.join('；')));
-  // 鉄壁: 品詞ごとの意味の行（赤字だけでは足りない情報があるとき）
+  // 鉄壁: 多義語の要約（①出席 ②注意 to）と、品詞ごとの意味の行（赤字だけでは足りない情報があるとき）
+  if (card.summary) back.append(h('span', { class: 'sum' }, card.summary));
   if (card.lines?.length) back.append(h('div', { class: 'lines' }, ...card.lines.map(l => h('span', {}, l))));
   const pic = illus(card, images); if (pic) back.append(pic);
-  for (const ex of (card.examples || []).slice(0, 2)) back.append(h('div', { class: 'ex' }, h('span', { class: 'en' }, ex.en), ex.ja ? h('span', { class: 'ja' }, ex.ja) : null));
+  // 鉄壁は例文が意味ごとに付く（多義語）ので全部出す
+  for (const ex of (card.examples || []).slice(0, card.m === 'teppeki' ? 6 : 2)) back.append(h('div', { class: 'ex' }, h('span', { class: 'en' }, ex.en), ex.ja ? h('span', { class: 'ja' }, ex.ja) : null));
   const sect = (label, items) => items?.length ? h('div', { class: 'sect' }, h('b', {}, label), h('ul', {}, ...items.map(x => h('li', {}, x)))) : null;
   const add = el => { if (el) back.append(el); };
   add(sect(card.m === 'teppeki' ? '★' : '▶', card.usage));

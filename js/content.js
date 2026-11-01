@@ -46,7 +46,7 @@ function fromSokujuku(c) {
   };
 }
 
-const TP_POS = { '他': '動', '自': '動', '動': '動', '名': '名', '形': '形', '副': '副', '前': '前', '接': '接', '代': '代', '助': '助', '句': '熟語' };
+const TP_POS = { '他': '動', '自': '動', '自他': '動', '他自': '動', '動': '動', '名': '名', '形': '形', '副': '副', '前': '前', '接': '接', '代': '代', '助': '助', '句': '熟語' };
 const meaningOf = ms => (ms || []).map(m => m.red || m.text).filter(Boolean).join('；');
 const lineOf = m => (m.pos ? `〔${m.pos}〕` : '') + m.text;
 const squash = s => (s || '').replace(/[，,；;\s]/g, '');
@@ -62,7 +62,7 @@ function fromTeppeki(e, sectionTitles) {
   return {
     id: `tp-${no}`, m: 'teppeki', deck: `SECTION ${e.section}`, deckNo: e.section, no: e.no,
     front: e.headword, pron: e.pron || '', pos: TP_POS[e.meanings?.[0]?.pos] || e.meanings?.[0]?.pos || '', flags: [],
-    rank: e.rank ?? 0, group: e.group || null,
+    rank: e.rank ?? 0, group: e.group || null, summary: e.summary || '',
     meaning: meaningOf(e.meanings), sub: [], lines: linesOf(e.meanings),
     examples: (e.examples || []).map(x => ({ en: x.en, ja: x.ja })),
     usage: e.notes || [], colloc: (e.phrases || []).map(p => p.ja ? `${p.en}「${p.ja}」` : p.en),

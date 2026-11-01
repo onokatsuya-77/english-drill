@@ -251,6 +251,7 @@ details summary { cursor: pointer; padding: 8px 0; }
 .rank { color: #C8202F; font-size: .45em; font-weight: 800; vertical-align: super; margin-left: 4px; letter-spacing: -1px; }
 .illus { display: block; width: 70%; height: auto; border-radius: 10px; background: #fff; mix-blend-mode: multiply; }
 .back .lines { display: flex; flex-direction: column; gap: 2px; font-size: 14px; line-height: 1.6; color: var(--ink2); }
+.back .sum { align-self: flex-start; border: 1.5px solid var(--ink2); border-radius: 6px; padding: 1px 8px; font-size: 13px; font-weight: 700; color: var(--ink2); }
 .back .dv { display: flex; flex-direction: column; gap: 6px; padding-top: 12px; border-top: 1px dashed #E1E4EE; }
 .back .dv .w { font-size: 17px; font-weight: 800; }
 .back .dv .w .rank { font-size: .7em; }
