@@ -44,5 +44,26 @@ for (const [f,exp] of [[`${S}/t1400/tg1400_all_0001-1400.json`,1400],[`${S}/t190
   console.log('teppeki S1-12 cards', cards.length, 'images', images.length, 'max card chunk KB', (maxBytes / 1024).toFixed(0), 'max image chunk KB', (maxImg / 1024).toFixed(0));
   assert.ok(maxBytes < 900 * 1024 && maxImg < 900 * 1024);
 }
+// 鉄壁（全 SECTION 1〜50）: 番号の連続、品詞の対応、絵の共有、要約のかぎかっこ、大きさ
+{
+  const data = JSON.parse(fs.readFileSync(`${S}/tp/teppeki_S01-50.json`, 'utf8'));
+  const { material, cards, images } = normalize(data);
+  assert.equal(cards.length, 2176); assert.equal(material.decks.length, 50);
+  assert.deepEqual(data.entries.map(e => e.no), Array.from({ length: 2176 }, (_, i) => i + 1));
+  assert.ok(cards.every(c => c.front && c.meaning && [0, 1, 2].includes(c.rank)));
+  const POS = ['動', '名', '形', '副', '前', '接', '代', '助', '熟語', '接頭'];
+  assert.ok(cards.every(c => POS.includes(c.pos)), cards.filter(c => !POS.includes(c.pos)).map(c => c.front + c.pos).join());
+  assert.equal(cards.find(c => c.front === 'all the same').pos, '熟語');
+  assert.equal(cards.find(c => c.front === 'consider').derived.find(d => d.word === 'considering').pos, '前');
+  assert.equal(cards.find(c => c.front === 'company').derived.find(d => d.word === 'accompany').img, 'tp-p174_0');
+  assert.ok(['that is (to say)', 'namely', 'in short'].every(w => cards.find(c => c.front === w).img === 'tp-p621_0'));
+  assert.equal(cards.find(c => c.front === 'tight').summary, '「タイト・スカート」「タイトなスケジュール」');
+  const ids = new Set(images.map(x => x.id));
+  assert.ok(cards.every(c => (!c.img || ids.has(c.img)) && c.derived.every(d => !d.img || ids.has(d.img))));
+  const ch = chunk(cards); const maxBytes = Math.max(...ch.map(c => Buffer.byteLength(JSON.stringify(c))));
+  const ich = chunk(images, 40); const maxImg = Math.max(...ich.map(c => Buffer.byteLength(JSON.stringify(c))));
+  console.log('teppeki S1-50 cards', cards.length, 'images', images.length, 'card chunks', ch.length, 'max card chunk KB', (maxBytes / 1024).toFixed(0), 'image chunks', ich.length, 'max image chunk KB', (maxImg / 1024).toFixed(0));
+  assert.ok(maxBytes < 900 * 1024 && maxImg < 900 * 1024);
+}
 assert.equal(detectFormat({}), null);
 console.log('content tests passed');
