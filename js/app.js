@@ -12,6 +12,7 @@ import { renderAdmin } from './ui/admin.js';
 import { renderRead } from './ui/read.js';
 import { renderProfiles } from './ui/profiles.js';
 import { renderAdd } from './ui/add.js';
+import { initUpdate } from './update.js';
 
 const useMock = new URLSearchParams(location.search).get('mock') === '1';
 const { backend } = await import(useMock ? './backend-mock.js' : './backend-firebase.js');
@@ -97,13 +98,7 @@ store.addEventListener('change', () => {
 window.addEventListener('hashchange', render);
 await store.start();
 render();
-if ('serviceWorker' in navigator && !useMock && location.protocol === 'https:') {
-  const hadController = !!navigator.serviceWorker.controller;
-  let reloaded = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!hadController || reloaded) return;
-    if (current?.sticky) { toast('新しい版があります。学習が終わったら開き直してください'); return; }
-    reloaded = true; location.reload();
-  });
-  navigator.serviceWorker.register('./sw.js').then(r => r.update()).catch(e => console.warn('sw', e));
+if (!useMock && location.protocol === 'https:') {
+  // 新しい版があるときだけ取り込んで開き直す（学習の途中は、終わってから）
+  initUpdate({ busy: () => !!current?.sticky, onUpdated: () => toast(`新しい版（v${APP_VERSION}）にしました`) });
 }

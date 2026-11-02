@@ -1,6 +1,7 @@
 import { h, toast } from '../dom.js';
 import { APP_VERSION } from '../config.js';
 import { icon } from './parts.js';
+import { checkForUpdate } from '../update.js';
 
 /** 設定: 学習者、1日の目標、教材、管理、ログアウト */
 export function renderSettings(store, { go, isAdmin }) {
@@ -37,6 +38,12 @@ export function renderSettings(store, { go, isAdmin }) {
     h('div', { class: 'list' },
       h('div', { class: 'set-row' }, h('span', {}, 'ログイン中'), h('span', { style: { color: 'var(--ink2)', fontSize: '13px' } }, store.user.email)),
       h('button', { class: 'set-row', style: { color: 'var(--red)', cursor: 'pointer' }, onclick: () => store.backend.signOut() }, h('span', {}, 'ログアウト'), icon('logout', 20))),
+    h('div', { class: 'sec-h' }, h('h2', {}, 'アプリ'), h('span', { class: 'small muted' }, '新しい版があるときだけ、開いたときやアプリに戻ったときに自動で取り込みます。学習の途中なら、終わってから切り替わります。')),
+    h('div', { class: 'list' },
+      h('button', { class: 'set-row', style: { cursor: 'pointer' }, onclick: async () => {
+        const r = await checkForUpdate(true);
+        toast({ found: '新しい版を取り込んでいます。まもなく切り替わります', none: '最新の版です', offline: '電波がないため確かめられません', unsupported: 'この環境では確かめられません' }[r]);
+      } }, h('span', {}, '更新を確かめる'), h('span', { style: { color: 'var(--ink2)', fontWeight: 600 } }, `v${APP_VERSION}`))),
     h('p', { class: 'center small muted', style: { marginTop: '20px' } }, `English Drill v${APP_VERSION}`),
     bootLine(),
   );
