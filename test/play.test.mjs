@@ -68,6 +68,24 @@ await p.click('button[aria-label="再生"]'); await p.waitForTimeout(3600);
 said = await p.evaluate(() => window.__said); console.log('word mode', said.slice(0, 2).map(s => s.text));
 assert.equal(said[1].lang, 'en-US'); assert.ok(!said[1].text.includes(' '), '語');
 await p.click('button[aria-label="一時停止"]');
+// 英語 → 日本語（語）。英語は 2 回くり返す
+await p.selectOption('#pl-向き', 'en-ja'); await p.selectOption('#pl-英語', '2'); await p.waitForTimeout(200);
+await p.evaluate(() => { window.__said = []; });
+await p.click('button[aria-label="再生"]'); await p.waitForTimeout(4200); await shot('5b_enja_word');
+said = await p.evaluate(() => window.__said); console.log('en-ja word', said.slice(0, 3).map(s => `${s.lang} ${s.text}`));
+assert.deepEqual(said.slice(0, 3).map(s => s.lang), ['en-US', 'en-US', 'ja-JP'], '英語 2 回 → 日本語');
+assert.equal(await p.textContent('.player .pill'), '英語 → 日本語');
+await p.click('button[aria-label="一時停止"]');
+// 英語 → 日本語（例文）
+await p.selectOption('#pl-流すもの', 'sentence'); await p.selectOption('#pl-英語', '1'); await p.waitForTimeout(200);
+await p.evaluate(() => { window.__said = []; });
+await p.click('button[aria-label="再生"]'); await p.waitForTimeout(800); await shot('5c_enja_sentence_q');
+await p.waitForTimeout(5200);
+said = await p.evaluate(() => window.__said); console.log('en-ja sentence', said.slice(0, 2).map(s => `${s.lang} ${s.text}`));
+assert.equal(said[0].lang, 'en-US'); assert.ok(said[0].text.includes(' ')); assert.equal(said[1].lang, 'ja-JP');
+const gap2 = said[1].t - said[0].t; console.log('en→ja ms', gap2); assert.ok(gap2 >= 2000 && gap2 < 2600);
+await p.click('button[aria-label="一時停止"]');
+await p.selectOption('#pl-向き', 'ja-en');
 // 鉄壁（例文の無い語は語で、句副の熟語も）: 今日学習した語は無い → Section 46
 await p.evaluate(() => localStorage.setItem('ed-play-opts', JSON.stringify({ pause: 2, content: 'sentence' })));
 await p.goto(B + '#/play/teppeki/deck/46'); await p.waitForTimeout(400);

@@ -285,8 +285,8 @@ details summary { cursor: pointer; padding: 8px 0; }
 .pill.dark { background: var(--night3); color: #fff; }
 .play-card { margin: 4px 16px 0; padding: 22px 20px; border-radius: 24px; background: var(--night2); display: flex; flex-direction: column; gap: 14px; min-height: 290px; }
 .play-card .phase { min-height: 18px; font-size: 13px; font-weight: 700; color: var(--hl); }
-.play-card .ja { margin: 0; font-size: 24px; line-height: 1.55; font-weight: 700; }
-.play-card .en { margin: 0; min-height: 33px; font-size: 22px; line-height: 1.5; font-weight: 600; }
+.play-card .q { margin: 0; font-size: 24px; line-height: 1.55; font-weight: 700; overflow-wrap: anywhere; }
+.play-card .a { margin: 0; min-height: 33px; font-size: 22px; line-height: 1.5; font-weight: 600; overflow-wrap: anywhere; }
 .play-card .word-sub { margin: 0; font-size: 14px; color: var(--nightInk); }
 .gauge { height: 6px; border-radius: 3px; background: var(--night3); overflow: hidden; }
 .gauge > div { width: 0; height: 100%; border-radius: 3px; background: var(--hl); }

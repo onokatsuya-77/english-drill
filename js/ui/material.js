@@ -85,7 +85,7 @@ export function renderMaterial(store, { go, params }) {
   }
   main.append(h('section', { class: 'card' },
     h('h2', {}, '連続再生（瞬間英作文）'),
-    h('p', { class: 'muted', style: { fontSize: '14px', lineHeight: 1.7, margin: 0 } }, '日本語 → 間 → 英語 を自動で流します。間のうちに英語を口に出して言う練習です。車や散歩のときに。学習の記録はつけません。'),
+    h('p', { class: 'muted', style: { fontSize: '14px', lineHeight: 1.7, margin: 0 } }, '日本語 → 間 → 英語（向きを変えると 英語 → 間 → 日本語）を自動で流します。例文でも語でもできます。間のうちに答えを口に出して言う練習です。車や散歩のときに。学習の記録はつけません。'),
     h('select', { class: 'input', 'aria-label': '流す範囲', onchange: e => { v.play = e.target.value; } },
       ...scopes.map(([id, name]) => h('option', { value: id, selected: id === v.play }, name))),
     h('button', { class: 'btn tint block', onclick: () => { const [k, a] = v.play.split(':'); go(`play/${mid}/${k}${a ? '/' + a : ''}`); } }, icon('play', 20, 2.2), '再生画面へ')));

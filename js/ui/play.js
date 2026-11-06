@@ -1,4 +1,4 @@
-// 連続再生（瞬間英作文）: 日本語 → 間 → 英語 を自動で流す。車や散歩のとき用。学習の記録はつけない。
+// 連続再生（瞬間英作文）: 日本語 → 間 → 英語（または 英語 → 間 → 日本語）を自動で流す。車や散歩のとき用。学習の記録はつけない。
 import { h, clear, toast } from '../dom.js';
 import { cleanMeaning } from '../quiz.js';
 import { canSpeak, say, stopSpeaking, hasJaVoice } from '../speech.js';
@@ -6,7 +6,8 @@ import { icon, shortTitle } from './parts.js';
 
 const OPT_KEY = 'ed-play-opts';
 const POS_KEY = 'ed-play-pos:';
-const DEFAULT_OPTS = { content: 'sentence', pause: 'auto', repeat: 1, rate: 1, loop: true, keepAlive: false };
+const DEFAULT_OPTS = { dir: 'ja-en', content: 'sentence', pause: 'auto', repeat: 1, rate: 1, loop: true, keepAlive: false };
+const DIR_NAME = { 'ja-en': '日本語 → 英語', 'en-ja': '英語 → 日本語' };
 const SCOPE_NAME = { today: '今日学習した語', shaky: 'あやしい語' };
 
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
@@ -24,10 +25,12 @@ export function playItems(cards, content = 'sentence') {
   }
   return out;
 }
-/** 英語を言うまでの間（自動は英語の長さに合わせる） */
-export function pauseMs(it, pause) {
+/** 答えを言うまでの間（自動は答えの長さに合わせる。英語を言うときは長め、日本語の意味を言うときは短め） */
+export function pauseMs(it, pause, dir = 'ja-en') {
   if (pause !== 'auto') return Number(pause) * 1000;
-  return it.kind === 'word' ? Math.min(5000, Math.max(2500, 2000 + it.en.length * 80)) : Math.min(9000, Math.max(3000, 1500 + it.en.length * 70));
+  const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
+  if (dir === 'en-ja') return it.kind === 'word' ? clamp(2000 + it.ja.length * 120, 2500, 4500) : clamp(2000 + it.ja.length * 90, 3000, 8000);
+  return it.kind === 'word' ? clamp(2000 + it.en.length * 80, 2500, 5000) : clamp(1500 + it.en.length * 70, 3000, 9000);
 }
 
 /** 画面ロック中も音を出し続けるための、無音のくり返し（試験中） */
@@ -73,13 +76,14 @@ export function renderPlay(store, { go, params }) {
   // ---- 画面（一度つくって、中身だけ書き換える） ----
   const count = h('span', { class: 'count' });
   const bar = h('div', {});
-  const jaEl = h('p', { class: 'ja', lang: 'ja' });
-  const enEl = h('p', { class: 'en', lang: 'en' });
+  const qEl = h('p', { class: 'q' });  // 先に流す方（日本語 → 英語なら日本語）
+  const aEl = h('p', { class: 'a' });  // 間のあとに流す答え
   const wordEl = h('p', { class: 'word-sub', lang: 'en' });
   const gauge = h('div', { class: 'gauge' }, h('div', {}));
   const phaseEl = h('span', { class: 'phase', 'aria-live': 'polite' });
   const playBtn = h('button', { class: 'play-btn', 'aria-label': '再生', onclick: () => (P.playing ? pause() : play()) });
   const status = h('p', { class: 'small note-dark' });
+  const dirPill = h('span', { class: 'pill dark' });
 
   function head() {
     return h('header', { class: 'study-head' },
@@ -87,7 +91,7 @@ export function renderPlay(store, { go, params }) {
         h('button', { class: 'icon-btn', style: { marginLeft: '-8px' }, 'aria-label': '連続再生をやめる', onclick: () => go(`m/${mid}`) }, icon('close', 22, 2.2)),
         h('div', { class: 'bar', role: 'progressbar', 'aria-label': '進み具合' }, bar),
         count),
-      h('div', { class: 'info' }, h('span', { class: 'pill dark' }, '連続再生'), h('span', {}, `${shortTitle(m.title)} · ${scopeName}`)));
+      h('div', { class: 'info' }, dirPill, h('span', {}, `${shortTitle(m.title)} · ${scopeName}`)));
   }
   function update() {
     P.tick = Date.now();
@@ -95,12 +99,14 @@ export function renderPlay(store, { go, params }) {
     const n = P.items.length;
     count.textContent = n ? `${P.idx + 1} / ${n}` : '0 / 0';
     bar.style.width = n ? `${((P.idx + (P.phase === 'gap' ? 1 : 0)) / n) * 100}%` : '0';
-    jaEl.textContent = it ? it.ja : '';
-    const showEn = P.phase === 'en' || P.phase === 'gap' || !P.playing;
-    enEl.textContent = it && showEn ? it.en : '';
-    enEl.classList.toggle('hidden', !showEn);
-    wordEl.textContent = it && it.kind === 'sentence' && showEn ? it.word : '';
-    phaseEl.textContent = { ja: '日本語', pause: '英語で言ってみる', en: '英語', gap: '', idle: P.items.length ? '止まっています' : '' }[P.phase] || '';
+    const jaFirst = opts.dir !== 'en-ja';
+    dirPill.textContent = DIR_NAME[opts.dir] || DIR_NAME['ja-en'];
+    qEl.lang = jaFirst ? 'ja' : 'en'; aEl.lang = jaFirst ? 'en' : 'ja';
+    qEl.textContent = it ? (jaFirst ? it.ja : it.en) : '';
+    const showA = P.phase === 'a' || P.phase === 'gap' || !P.playing;
+    aEl.textContent = it && showA ? (jaFirst ? it.en : it.ja) : '';
+    wordEl.textContent = it && it.kind === 'sentence' && showA ? it.word : '';
+    phaseEl.textContent = { q: jaFirst ? '日本語' : '英語', pause: jaFirst ? '英語で言ってみる' : '意味を言ってみる', a: jaFirst ? '英語' : '日本語', gap: '', idle: P.items.length ? '止まっています' : '' }[P.phase] || '';
     clear(playBtn); playBtn.append(icon(P.playing ? 'pause' : 'play', 40, 2.4));
     playBtn.setAttribute('aria-label', P.playing ? '一時停止' : '再生');
     status.textContent = !canSpeak ? 'この端末では読み上げが使えません。'
@@ -108,7 +114,7 @@ export function renderPlay(store, { go, params }) {
         : P.playing ? (wake ? '再生中は画面を消さずにおきます。車ではホルダーに固定して使ってください。' : '画面が消えると止まることがあります。止まったら、開き直すと続きから流れます。')
           : '続きから流れます。最後まで行くと' + (opts.loop ? '最初に戻ります。' : '止まります。');
     if ('mediaSession' in navigator && it) {
-      try { navigator.mediaSession.metadata = new MediaMetadata({ title: it.ja, artist: `${shortTitle(m.title)} · ${scopeName}`, album: 'English Drill 連続再生' }); } catch { /* 対応していない端末 */ }
+      try { navigator.mediaSession.metadata = new MediaMetadata({ title: jaFirst ? it.ja : it.en, artist: `${shortTitle(m.title)} · ${scopeName}`, album: 'English Drill 連続再生' }); } catch { /* 対応していない端末 */ }
     }
   }
   function startGauge(ms) {
@@ -130,16 +136,23 @@ export function renderPlay(store, { go, params }) {
       }
       saveLocal(posKey, P.idx);
       const it = P.items[P.idx];
-      P.phase = 'ja'; clearGauge(); update();
-      await say(it.ja, { lang: 'ja', rate: 1 }); if (!live()) return;
-      const wait = pauseMs(it, opts.pause);
+      const jaFirst = opts.dir !== 'en-ja';
+      // 英語は「くり返し」の回数だけ、設定の速さで読む（どちらの向きでも）
+      const sayEn = async () => {
+        for (let r = 0; r < opts.repeat; r++) {
+          await say(it.en, { lang: 'en', rate: opts.rate }); if (!live()) return false;
+          if (r < opts.repeat - 1) { await sleep(900); if (!live()) return false; }
+        }
+        return true;
+      };
+      const sayJa = async () => { await say(it.ja, { lang: 'ja', rate: 1 }); return live(); };
+      P.phase = 'q'; clearGauge(); update();
+      if (!(await (jaFirst ? sayJa() : sayEn()))) return;
+      const wait = pauseMs(it, opts.pause, opts.dir);
       P.phase = 'pause'; update(); startGauge(wait);
       await sleep(wait); if (!live()) return;
-      P.phase = 'en'; clearGauge(); update();
-      for (let r = 0; r < opts.repeat; r++) {
-        await say(it.en, { lang: 'en', rate: opts.rate }); if (!live()) return;
-        if (r < opts.repeat - 1) { await sleep(900); if (!live()) return; }
-      }
+      P.phase = 'a'; clearGauge(); update();
+      if (!(await (jaFirst ? sayEn() : sayJa()))) return;
       P.phase = 'gap'; update();
       await sleep(1600); if (!live()) return;
       P.idx++;
@@ -221,15 +234,16 @@ export function renderPlay(store, { go, params }) {
   }
   main.append(
     head(),
-    h('section', { class: 'play-card' }, phaseEl, jaEl, gauge, enEl, wordEl),
+    h('section', { class: 'play-card' }, phaseEl, qEl, gauge, aEl, wordEl),
     h('div', { class: 'play-ctrl' },
       h('button', { class: 'icon-btn big', 'aria-label': '前へ', onclick: () => jump(-1) }, icon('prev', 30, 2.2)),
       playBtn,
       h('button', { class: 'icon-btn big', 'aria-label': '次へ', onclick: () => jump(1) }, icon('next', 30, 2.2))),
     status,
     h('div', { class: 'list dark' },
-      row('流すもの', opts.content, [['sentence', '例文（日本語 → 英文）'], ['word', '語（意味 → 英語）']], v => setOpt({ content: v }, true)),
-      row('英語までの間', opts.pause, [['auto', '自動（長さに合わせる）'], [2, '2秒'], [3, '3秒'], [5, '5秒'], [8, '8秒']], v => setOpt({ pause: v === 'auto' ? 'auto' : Number(v) })),
+      row('向き', opts.dir, [['ja-en', '日本語 → 英語'], ['en-ja', '英語 → 日本語']], v => { setOpt({ dir: v }); restartCurrent(); }),
+      row('流すもの', opts.content, [['sentence', '例文'], ['word', '語（単語・熟語）']], v => setOpt({ content: v }, true)),
+      row('答えまでの間', opts.pause, [['auto', '自動（長さに合わせる）'], [2, '2秒'], [3, '3秒'], [5, '5秒'], [8, '8秒']], v => setOpt({ pause: v === 'auto' ? 'auto' : Number(v) })),
       row('英語', opts.repeat, [[1, '1回'], [2, '2回くり返す']], v => setOpt({ repeat: Number(v) })),
       row('英語の速さ', opts.rate, [[0.8, 'ゆっくり'], [1, 'ふつう'], [1.15, '速め']], v => setOpt({ rate: Number(v) })),
       row('最後まで行ったら', opts.loop ? 1 : 0, [[1, '最初に戻る'], [0, '止まる']], v => setOpt({ loop: v === '1' })),
