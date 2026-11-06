@@ -16,6 +16,7 @@ import { renderPlay } from './ui/play.js';
 import { initUpdate } from './update.js';
 
 const useMock = new URLSearchParams(location.search).get('mock') === '1';
+const standalone = navigator.standalone === true || window.matchMedia?.('(display-mode: standalone)').matches;
 const { backend } = await import(useMock ? './backend-mock.js' : './backend-firebase.js');
 const store = new Store(backend);
 window.store = store; // デバッグ用
@@ -76,6 +77,8 @@ function renderLogin() {
     h('div', { style: { marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' } },
       h('button', { class: 'btn dark block', style: { height: '56px' }, onclick: () => { backend.signIn().catch(e => alert('ログインできませんでした: ' + e.message)); } }, icon('logout', 20), 'Google でログイン'),
       store.error ? h('p', { class: 'small', style: { color: 'var(--red)', textAlign: 'center' } }, store.error) : null,
+      // ホーム画面のアプリ（iPad など）では、ログインの画面でアカウントが出ず入力もできないことがある。当面は Safari で使ってもらう
+      standalone ? h('p', { class: 'small muted center', style: { lineHeight: 1.6 } }, 'ホーム画面のアプリでログインの画面がうまく使えないときは、Safari でこのページを開いてログインし、Safari のまま使ってください。') : null,
       h('p', { class: 'small muted center', style: { lineHeight: 1.6 } }, '家族として登録された Google アカウントで使えます。', h('br'), `v${APP_VERSION}${useMock ? '（テストモード）' : ''}`)));
 }
 function renderDenied() {
