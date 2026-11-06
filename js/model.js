@@ -363,6 +363,8 @@ export class Store extends EventTarget {
    *  deck  … その Section（期限 → あやしい → 新規 → その他、最大 PRACTICE_SIZE）
    *  shaky … あやしい語（正解率の低い順）
    *  miss  … よく間違える語（もう一度の多い順）
+   *  extra … 今日の分のあとに、さらに新しい語（arg 語）
+   *  ahead … 今日の分のあとに、復習日が近い語を先取り（arg 語。今日もう出した語は除く）
    */
   buildQueue(mid, kind = 'today', arg = null, now = Date.now()) {
     const cards = this.cards.get(mid) || [];
@@ -389,6 +391,7 @@ export class Store extends EventTarget {
         .sort((a, b) => accuracyOf(st(a)) - accuracyOf(st(b))).slice(0, PRACTICE_SIZE);
     }
     if (kind === 'extra') return this.newCandidates(mid, Number(arg) || 10);
+    if (kind === 'ahead') return this.aheadCandidates(mid, Number(arg) || PRACTICE_SIZE, now);
     if (kind === 'miss') {
       return cards.filter(c => st(c) && (st(c).lapses || 0) >= MISS_LAPSES)
         .sort((a, b) => (st(b).lapses || 0) - (st(a).lapses || 0)).slice(0, PRACTICE_SIZE);

@@ -69,7 +69,7 @@ export function renderMaterial(store, { go, params }) {
             + (ms.mode === 'spell' && m.kind === 'idioms' ? '熟語は、例文の空欄に入る語を書きます。' : ''))),
       c.total
         ? h('a', { class: 'btn primary block', href: `#/study/${mid}/today` }, '今日の学習を始める', icon('arrow', 20, 2.2))
-        : h('div', { class: 'btn outline block', style: { cursor: 'default' } }, '今日の分はおわりました'),
+        : moreButtons(store, mid, unit),
     ));
   }
 
@@ -156,6 +156,19 @@ export function renderMaterial(store, { go, params }) {
       await store.setStatus(mid, 'off'); toast('一覧から外しました'); go('');
     } }, '一覧から外す')));
   return main;
+}
+
+/** 今日の分が終わったあと: さらに新しい語・復習の先取りへ進む */
+const EXTRA_NEW = 10, EXTRA_AHEAD = 20; // 学習画面のおわりと同じ数
+function moreButtons(store, mid, unit) {
+  const fresh = store.newCandidates(mid, EXTRA_NEW).length;
+  const ahead = store.aheadCandidates(mid, EXTRA_AHEAD).length;
+  return h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
+    h('div', { class: 'done-line' }, icon('check', 20, 2.6), '今日の分はおわりました'),
+    fresh ? h('a', { class: 'btn primary block', href: `#/study/${mid}/extra/${EXTRA_NEW}` }, `新しい語をあと${fresh}${unit}`, icon('arrow', 20, 2.2)) : null,
+    ahead ? h('a', { class: 'btn tint block', href: `#/study/${mid}/ahead/${EXTRA_AHEAD}` }, `復習を先に進める（${ahead}${unit}）`) : null,
+    fresh || ahead ? h('span', { class: 'small muted', style: { lineHeight: 1.6 } },
+      '先に進めた分も、今日の記録と目標に入ります。' + (ahead ? '復習の先取りは、次の復習日が近い語から出します（今日もう出した語は出しません）。' : '')) : null);
 }
 
 function tile(k, v, unit = '') {

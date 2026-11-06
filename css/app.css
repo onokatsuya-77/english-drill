@@ -299,3 +299,4 @@ details summary { cursor: pointer; padding: 8px 0; }
 .list.dark .set-row { color: #fff; }
 .list.dark .set-row select { color: var(--nightInk); }
 .list.dark .set-row select option { color: var(--ink); }
+.done-line { min-height: 48px; padding: 0 14px; border-radius: 14px; background: var(--tealTint); color: var(--teal); display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 15px; font-weight: 700; }

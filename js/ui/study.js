@@ -7,7 +7,8 @@ import { icon, rings, medal, shortTitle, rankMark, illus } from './parts.js';
 
 const LEARN_WINDOW = 30 * 60000; // この時間内に再出題になるカードはセッションの中でもう一度出す
 const MODE_LABEL = { card: ['カード', 'indigo'], choice: ['4択', 'orange'], spell: ['つづり', 'indigo'], cloze: ['穴埋め', 'orange'], listen: ['リスニング', 'teal'] };
-const KIND_LABEL = { today: '今日の学習', deck: '練習', shaky: 'あやしい語', miss: 'よく間違える語', extra: '新しい語' };
+const KIND_LABEL = { today: '今日の学習', deck: '練習', shaky: 'あやしい語', miss: 'よく間違える語', extra: '新しい語', ahead: '復習の先取り' };
+const EXTRA_NEW = 10, EXTRA_AHEAD = 20; // 今日の分のあとに進める数（教材ページと同じ）
 
 /** 学習画面（5つの出題形式）と、学習のおわり */
 export function renderStudy(store, { go, params }) {
@@ -26,7 +27,7 @@ export function renderStudy(store, { go, params }) {
 
   function header(card, mode, isNew) {
     const st = store.stateOf(card.id);
-    const ahead = kind === 'today' && st && st.due > s.startMs; // 復習日より前に出した語
+    const ahead = (kind === 'today' || kind === 'ahead') && st && st.due > s.startMs; // 復習日より前に出した語
     const [label, tone] = mode === 'card' ? [isNew ? '新規' : ahead ? '先取り' : st?.state === State.Review ? '復習' : '学習中', isNew ? 'teal' : 'indigo'] : MODE_LABEL[mode];
     const n = Math.min(s.idx + 1, s.queue.length);
     return h('header', { class: 'study-head' },
@@ -280,7 +281,10 @@ export function renderStudy(store, { go, params }) {
     const fr = store.ringFractions(store.today());
     const all = fr.every(f => f >= 1);
     const misses = [...s.again.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id]) => store.cardIndex.get(id)).filter(Boolean);
-    const where = kind === 'today' ? `${shortTitle(m.title)} の今日の分が終わりました` : `${shortTitle(m.title)} · ${deckTitle || KIND_LABEL[kind]}の練習が終わりました`;
+    const where = kind === 'today' ? `${shortTitle(m.title)} の今日の分が終わりました`
+      : kind === 'extra' ? `${shortTitle(m.title)} の新しい語を進めました`
+        : kind === 'ahead' ? `${shortTitle(m.title)} の復習を先に進めました`
+          : `${shortTitle(m.title)} · ${deckTitle || KIND_LABEL[kind]}の練習が終わりました`;
     const sub = !s.done ? '今は出題できる語がありません' : early ? 'ここまでの記録を保存しました' : where;
     main.append(
       h('header', { style: { display: 'flex', justifyContent: 'flex-end', padding: '14px 12px 0' } },
@@ -307,12 +311,16 @@ export function renderStudy(store, { go, params }) {
         h('h2', { style: { margin: '0 0 6px', fontSize: '14px', fontWeight: 700, color: 'var(--nightInk)' } }, '「もう一度」が多かった語'),
         ...misses.map(c => h('div', { class: 'miss' }, h('b', {}, c.front), h('span', {}, c.meaning)))));
     }
-    const more = store.newCandidates(mid, 10).length;
+    // 今日の分（と、そのあと進めた分）が終わったら、さらに進められるようにする
+    const goOn = ['today', 'extra', 'ahead'].includes(kind) && store.counts(mid).total === 0;
+    const more = goOn ? store.newCandidates(mid, EXTRA_NEW).length : 0;
+    const aheadN = goOn ? store.aheadCandidates(mid, EXTRA_AHEAD).length : 0;
+    const line = { border: '2px solid #3A4370', color: '#fff' };
     main.append(h('div', { style: { marginTop: 'auto', padding: '22px 16px 30px', display: 'flex', flexDirection: 'column', gap: '10px' } },
       h('a', { class: 'btn white block', href: '#/' }, 'ホームへ'),
-      kind === 'today' && !early && more
-        ? h('a', { class: 'btn block', style: { border: '2px solid #3A4370', color: '#fff' }, href: `#/study/${mid}/extra/10` },`あと${Math.min(10, more)}語、新しく覚える`)
-        : h('a', { class: 'btn block', style: { border: '2px solid #3A4370', color: '#fff' }, href: `#/m/${mid}` }, '教材ページへ')));
+      more ? h('a', { class: 'btn block', style: line, href: `#/study/${mid}/extra/${EXTRA_NEW}` }, `あと${more}語、新しく覚える`) : null,
+      aheadN ? h('a', { class: 'btn block', style: line, href: `#/study/${mid}/ahead/${EXTRA_AHEAD}` }, `復習を先に進める（${aheadN}語）`) : null,
+      more || aheadN ? null : h('a', { class: 'btn block', style: line, href: `#/m/${mid}` }, '教材ページへ')));
   }
 
   main.dispose = () => { window.removeEventListener('keydown', onKey); stopSpeaking(); };
