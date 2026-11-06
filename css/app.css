@@ -276,3 +276,26 @@ details summary { cursor: pointer; padding: 8px 0; }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 @media (min-width: 600px) { .app { padding-top: 12px; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* 連続再生（瞬間英作文）: 車でも見やすい暗い画面 */
+.player { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; background: var(--night); color: #fff; padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+.player .study-head .bar { background: var(--night3); }
+.player .study-head .bar > div { background: var(--hl); }
+.player .study-head .info { color: var(--nightInk); }
+.pill.dark { background: var(--night3); color: #fff; }
+.play-card { margin: 4px 16px 0; padding: 22px 20px; border-radius: 24px; background: var(--night2); display: flex; flex-direction: column; gap: 14px; min-height: 290px; }
+.play-card .phase { min-height: 18px; font-size: 13px; font-weight: 700; color: var(--hl); }
+.play-card .ja { margin: 0; font-size: 24px; line-height: 1.55; font-weight: 700; }
+.play-card .en { margin: 0; min-height: 33px; font-size: 22px; line-height: 1.5; font-weight: 600; }
+.play-card .word-sub { margin: 0; font-size: 14px; color: var(--nightInk); }
+.gauge { height: 6px; border-radius: 3px; background: var(--night3); overflow: hidden; }
+.gauge > div { width: 0; height: 100%; border-radius: 3px; background: var(--hl); }
+.play-ctrl { display: flex; align-items: center; justify-content: center; gap: 28px; padding: 22px 16px 6px; }
+.play-btn { width: 96px; height: 96px; border: 0; border-radius: 48px; background: var(--hl); color: var(--ink); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.icon-btn.big { width: 64px; height: 64px; border-radius: 32px; background: var(--night2); color: #fff; }
+.note-dark { margin: 10px 20px 14px; text-align: center; line-height: 1.6; color: var(--nightInk); }
+.list.dark { background: var(--night2); box-shadow: none; }
+.list.dark > * + * { border-top-color: var(--night3); }
+.list.dark .set-row { color: #fff; }
+.list.dark .set-row select { color: var(--nightInk); }
+.list.dark .set-row select option { color: var(--ink); }

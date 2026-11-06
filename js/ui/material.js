@@ -73,6 +73,23 @@ export function renderMaterial(store, { go, params }) {
     ));
   }
 
+  // 連続再生（瞬間英作文）
+  const todayN = store.playCards(mid, 'today').length;
+  const scopes = [
+    ...(todayN ? [['today', `今日学習した語（${todayN}）`]] : []),
+    ...(mm.shaky ? [['shaky', `あやしい語（${mm.shaky}）`]] : []),
+    ...decks.map(d => [`deck:${d.no}`, d.title])];
+  if (!scopes.some(([id]) => id === v.play)) {
+    const studiedDeck = [...decks].reverse().find(d => { const x = mm.deckList.find(y => y.no === d.no); return x && x.new < x.total; }); // いちばん進んだ Section
+    v.play = todayN ? 'today' : `deck:${(studiedDeck || decks[0])?.no ?? 1}`;
+  }
+  main.append(h('section', { class: 'card' },
+    h('h2', {}, '連続再生（瞬間英作文）'),
+    h('p', { class: 'muted', style: { fontSize: '14px', lineHeight: 1.7, margin: 0 } }, '日本語 → 間 → 英語 を自動で流します。間のうちに英語を口に出して言う練習です。車や散歩のときに。学習の記録はつけません。'),
+    h('select', { class: 'input', 'aria-label': '流す範囲', onchange: e => { v.play = e.target.value; } },
+      ...scopes.map(([id, name]) => h('option', { value: id, selected: id === v.play }, name))),
+    h('button', { class: 'btn tint block', onclick: () => { const [k, a] = v.play.split(':'); go(`play/${mid}/${k}${a ? '/' + a : ''}`); } }, icon('play', 20, 2.2), '再生画面へ')));
+
   // 覚え具合
   const mastery = h('section', { class: 'card', 'aria-labelledby': `mt-${mid}` },
     h('div', { class: 'row-between', style: { alignItems: 'baseline' } },

@@ -397,6 +397,27 @@ export class Store extends EventTarget {
   }
   missCount(mid) { return (this.cards.get(mid) || []).filter(c => (this.states.get(c.id)?.lapses || 0) >= MISS_LAPSES).length; }
 
+  /**
+   * 連続再生（日本語 → 間 → 英語）で流す語。記録はつけない。scope:
+   *  deck  … その Section の語（本の順。「出題する重要度」に合わせる）
+   *  today … 今日学習した語（学習した順）
+   *  shaky … あやしい語
+   */
+  playCards(mid, scope, arg = null, now = Date.now()) {
+    const cards = this.cards.get(mid) || [];
+    const st = c => this.states.get(c.id);
+    if (scope === 'deck') {
+      const minRank = this.matSettings(mid).minRank || 0;
+      return cards.filter(c => c.deckNo === Number(arg) && (c.rank == null || c.rank >= minRank));
+    }
+    if (scope === 'today') {
+      const key = dayKey(now);
+      return cards.filter(c => st(c)?.lastReview && dayKey(st(c).lastReview) === key).sort((a, b) => st(a).lastReview - st(b).lastReview);
+    }
+    if (scope === 'shaky') return cards.filter(c => st(c) && masteryOf(st(c)) === 'shaky');
+    return [];
+  }
+
   /** 評価を記録する。correct: 正解だったか（カードは評価から決める）。戻り値は新しい状態。 */
   async review(card, rating, durationMs, extra = {}, now = Date.now()) {
     const prev = this.states.get(card.id) || emptyCard(now);

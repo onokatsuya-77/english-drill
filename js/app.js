@@ -12,6 +12,7 @@ import { renderAdmin } from './ui/admin.js';
 import { renderRead } from './ui/read.js';
 import { renderProfiles } from './ui/profiles.js';
 import { renderAdd } from './ui/add.js';
+import { renderPlay } from './ui/play.js';
 import { initUpdate } from './update.js';
 
 const useMock = new URLSearchParams(location.search).get('mock') === '1';
@@ -19,7 +20,7 @@ const { backend } = await import(useMock ? './backend-mock.js' : './backend-fire
 const store = new Store(backend);
 window.store = store; // デバッグ用
 
-const routes = { '': renderHome, m: renderMaterial, study: renderStudy, progress: renderProgress, settings: renderSettings, admin: renderAdmin, read: renderRead, profiles: renderProfiles, add: renderAdd };
+const routes = { '': renderHome, m: renderMaterial, study: renderStudy, progress: renderProgress, settings: renderSettings, admin: renderAdmin, read: renderRead, profiles: renderProfiles, add: renderAdd, play: renderPlay };
 const TABS = [['', 'book', 'ホーム'], ['progress', 'rings', '記録'], ['settings', 'sliders', '設定']];
 const TAB_OF = { '': '', m: '', add: '', read: '', progress: 'progress', settings: 'settings', admin: 'settings', profiles: 'settings' };
 
@@ -42,7 +43,7 @@ function render() {
   const view = routes[path] || renderHome;
   const el = view(store, { go, isAdmin: store.isAdmin, params });
   current = el;
-  root.append(path === 'study' ? el : shell(el, path));
+  root.append(path === 'study' || path === 'play' ? el : shell(el, path));
 }
 function shell(content, path) {
   const frag = document.createDocumentFragment();
