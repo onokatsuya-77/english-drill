@@ -25,9 +25,21 @@ const runAll = async route => {
 };
 await runAll('#/study/tg1900/today');
 await shot('1_finish_today');
-const btns = async () => p.$$eval('main a.btn', as => as.map(a => `${a.textContent}|${a.getAttribute('href')}`));
+const btns = async () => p.$$eval('main .btn', as => as.map(a => `${a.textContent}|${a.getAttribute('href') || 'button'}`));
 let bs = await btns(); console.log('finish(today)', bs);
-assert.ok(bs.some(x => x.startsWith('あと10語、新しく覚える|#/study/tg1900/extra/10')));
+assert.ok(bs.some(x => x.startsWith('あと10語、新しく覚える|button')));
+// 今日の分のおわりから「あと10語」を押すと、新しい語の学習が始まる
+await p.click('text=あと10語、新しく覚える'); await p.waitForTimeout(500);
+assert.ok(await p.$('.word'), 'あと10語（今日の分のあと）');
+assert.match(p.url(), /extra\/10$/);
+for (let i = 0; i < 80 && (await p.$('.word')); i++) { await p.keyboard.press('Space'); await p.waitForTimeout(60); await p.keyboard.press('4'); await p.waitForTimeout(90); }
+await p.waitForTimeout(500);
+// 「あと10語」のおわり（同じアドレス）からもう一度「あと10語」を押しても始まる（前はここで動かなかった）
+await p.click('text=あと10語、新しく覚える'); await p.waitForTimeout(500);
+assert.ok(await p.$('.word'), 'あと10語のあとのあと10語');
+await shot('1b_extra_again');
+for (let i = 0; i < 80 && (await p.$('.word')); i++) { await p.keyboard.press('Space'); await p.waitForTimeout(60); await p.keyboard.press('4'); await p.waitForTimeout(90); }
+await p.waitForTimeout(500);
 assert.ok(!bs.some(x => x.includes('/ahead/')), '今日はじめて覚えた語は、今日のうちには先取りに出さない');
 
 // 教材ページ: 「今日の分はおわりました」＋ 2 つのボタン
@@ -41,7 +53,7 @@ const nToday = await p.evaluate(() => window.store.today().newCards);
 // さらに新しい語 10 → 終わったら、また進められる
 await runAll('#/study/tg1900/extra/10');
 bs = await btns(); console.log('finish(extra)', bs);
-assert.ok(bs.some(x => x.includes('extra/10')), 'もう 10 語進められる');
+assert.ok(bs.some(x => x.startsWith('あと10語')), 'もう 10 語進められる');
 assert.equal(await p.evaluate(() => window.store.today().newCards), nToday + 10, '新しい語が今日の記録に入る');
 
 // 復習の先取り: 今日もう出した語は除くので、きょう学んだ語は出ない → 先取りは 0

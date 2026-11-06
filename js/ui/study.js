@@ -315,11 +315,13 @@ export function renderStudy(store, { go, params }) {
     const goOn = ['today', 'extra', 'ahead'].includes(kind) && store.counts(mid).total === 0;
     const more = goOn ? store.newCandidates(mid, EXTRA_NEW).length : 0;
     const aheadN = goOn ? store.aheadCandidates(mid, EXTRA_AHEAD).length : 0;
-    const line = { border: '2px solid #3A4370', color: '#fff' };
+    const line = { border: '2px solid #3A4370', color: '#fff', background: 'transparent' };
+    // 「あと10語」のあとの「あと10語」は今と同じアドレスなので、画面が切り替わらない。そのときは描き直しを自分で起こす
+    const goOn2 = path => { const t = '#/' + path; if (location.hash === t) window.dispatchEvent(new HashChangeEvent('hashchange')); else location.hash = t; };
     main.append(h('div', { style: { marginTop: 'auto', padding: '22px 16px 30px', display: 'flex', flexDirection: 'column', gap: '10px' } },
       h('a', { class: 'btn white block', href: '#/' }, 'ホームへ'),
-      more ? h('a', { class: 'btn block', style: line, href: `#/study/${mid}/extra/${EXTRA_NEW}` }, `あと${more}語、新しく覚える`) : null,
-      aheadN ? h('a', { class: 'btn block', style: line, href: `#/study/${mid}/ahead/${EXTRA_AHEAD}` }, `復習を先に進める（${aheadN}語）`) : null,
+      more ? h('button', { class: 'btn block', style: line, onclick: () => goOn2(`study/${mid}/extra/${EXTRA_NEW}`) }, `あと${more}語、新しく覚える`) : null,
+      aheadN ? h('button', { class: 'btn block', style: line, onclick: () => goOn2(`study/${mid}/ahead/${EXTRA_AHEAD}`) }, `復習を先に進める（${aheadN}語）`) : null,
       more || aheadN ? null : h('a', { class: 'btn block', style: line, href: `#/m/${mid}` }, '教材ページへ')));
   }
 
