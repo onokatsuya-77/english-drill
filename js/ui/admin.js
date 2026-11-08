@@ -1,5 +1,5 @@
 import { h, clear, toast } from '../dom.js';
-import { normalize, chunk, IMAGE_CHUNK } from '../content.js';
+import { normalize, chunk, chunkBySize } from '../content.js';
 import { icon } from './parts.js';
 
 /** 管理: 家族の教材（JSON）を Firestore に登録・更新する */
@@ -29,7 +29,7 @@ export function renderAdmin(store, { go, isAdmin }) {
         h('button', { class: 'btn primary block', onclick: async ev => {
           ev.target.disabled = true; status.append(prog);
           try {
-            await store.backend.saveMaterial(material, chunk(cards), chunk(passages, 10), p => { prog.value = p; }, chunk(images, IMAGE_CHUNK), chunk(extras, 100));
+            await store.backend.saveMaterial(material, chunk(cards), chunk(passages, 10), p => { prog.value = p; }, chunkBySize(images), chunk(extras, 100));
             await store.refreshMaterials(); refreshList(); toast('登録しました');
             clear(status); status.append(h('p', { style: { fontSize: '14px', color: 'var(--teal)', fontWeight: 700 } }, `${material.title} を登録しました。`));
           } catch (err) { alert('登録できませんでした: ' + err.message); ev.target.disabled = false; }

@@ -441,15 +441,16 @@ function markRed(text, red) {
   return out;
 }
 /** 古文の例文: 傍線部を強調した古文と、赤字を強調した訳 */
-function kobunExample(ex) {
+function kobunExample(ex, { showN = true } = {}) {
   const tgt = String(ex.target || '').split('・')[0];
   const i = tgt ? ex.en.indexOf(tgt) : -1;
   const en = i >= 0 ? [ex.en.slice(0, i), h('mark', { class: 'tgt' }, tgt), ex.en.slice(i + tgt.length)] : [ex.en];
   return h('div', { class: 'ex kb' },
-    h('span', { class: 'en' }, ex.n ? h('b', { class: 'n' }, circ(ex.n)) : null, ...en, ex.source ? h('small', { class: 'src' }, `（${ex.source}）`) : null),
+    h('span', { class: 'en' }, showN && ex.n ? h('b', { class: 'n' }, circ(ex.n)) : null, ...en, ex.source ? h('small', { class: 'src' }, `（${ex.source}）`) : null),
     ex.ja ? h('span', { class: 'ja' }, ...markRed(ex.ja, ex.red)) : null,
     ex.note ? h('span', { class: 'note' }, '＊ ' + ex.note) : null);
 }
+const ofMatch = (of, w) => !!of && !!w && (of === w || w.split('・').includes(of) || of.split('・').includes(w));
 const circ = n => (n >= 1 && n <= 20 ? String.fromCharCode(0x245F + n) : '');
 /** 古文のカードの裏面: 訳語（赤字強調）・KEY・POINT・図解・例文・関連語・入試 */
 function kobunBack(card, back, images) {
@@ -470,7 +471,9 @@ function kobunBack(card, back, images) {
   if (card.related?.length) {
     back.append(h('div', { class: 'sect' }, h('b', {}, '関連語'), h('ul', {}, ...card.related.map(r => h('li', {},
       `${r.mark} `, h('b', {}, r.text), r.reading && r.reading !== r.text ? h('span', { class: 'muted small' }, `（${r.reading}）`) : null, r.meaning ? h('span', { class: 'muted' }, ` ${r.meaning}`) : null,
-      ...rel.filter(x => x.of === r.text).map(kobunExample))))));
+      ...rel.filter(x => ofMatch(x.of, r.text)).map(x => kobunExample(x, { showN: false })))))));
+    // 関連語の欄に結びつかなかった用例も出す
+    for (const x of rel.filter(x => !card.related.some(r => ofMatch(x.of, r.text)))) back.append(kobunExample(x, { showN: false }));
   }
   if (card.exam) back.append(h('div', { class: 'kb-exam' }, h('b', {}, '入試', rankMark(card.rank, card.m)), h('p', {}, card.exam)));
   return back;

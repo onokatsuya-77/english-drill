@@ -82,14 +82,14 @@ export function renderDrill(store, { go, params }) {
         h('div', { class: 'bar', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': String(s.items.length), 'aria-valuenow': String(n) },
           h('div', { style: { width: `${(s.idx / s.items.length) * 100}%` } })),
         h('span', { class: 'count' }, `${n} / ${s.items.length}`)),
-      h('div', { class: 'info' }, h('span', { class: `pill ${q.type === 'choice' ? 'orange' : 'indigo'}` }, q.type === 'choice' ? '5択' : '口語訳'), h('span', {}, `${shortTitle(m.title)} · 実戦問題 ${circled(set)} · 問 ${q.n}`)));
+      h('div', { class: 'info' }, h('span', { class: `pill ${q.type === 'choice' ? 'orange' : q.type === 'grammar' ? 'teal' : 'indigo'}` }, q.type === 'choice' ? `${(q.options || []).length}択` : q.type === 'grammar' ? '文法' : '口語訳'), h('span', {}, `${shortTitle(m.title)} · 実戦問題 ${circled(set)} · 問 ${q.n}`)));
   }
   function show() {
     clear(main);
     const q = s.items[s.idx];
     if (!q) { finish(); return; }
     main.append(header(q));
-    (q.type === 'choice' ? showChoice : showTrans)(q);
+    (q.type === 'choice' ? showChoice : q.type === 'grammar' ? showGrammar : showTrans)(q);
   }
   function record(q, ok) {
     s.rec[q.id] = { ok, at: Date.now() }; saveRecord(store, mid, s.rec);
@@ -107,8 +107,9 @@ export function renderDrill(store, { go, params }) {
       ...cs.map(c => h('div', { class: 'ex kb', style: { marginTop: '6px' } }, h('span', { class: 'en kbw' }, c.front, c.kanji ? h('small', {}, `【${c.kanji}】`) : null, h('small', {}, ` ${c.no}`)), h('span', { class: 'ja' }, c.meaning))));
   }
   function question(q) {
+    const ask = q.type === 'choice' ? '傍線部の口語訳として適当なものを選んでください' : q.type === 'grammar' ? (q.q || '敬語・文法の問題') : '傍線部を口語訳してください（太字が本書の見出し語）';
     return h('section', { class: 'qcard' },
-      h('span', { class: 'ask' }, q.type === 'choice' ? '傍線部の口語訳として適当なものを選んでください' : '傍線部を口語訳してください（太字が本書の見出し語）'),
+      h('span', { class: 'ask' }, ask),
       h('p', { class: 'kobun-text' }, ...markKo(q.ko, q.target, q.head)),
       q.source ? h('span', { class: 'small muted' }, `〈${q.source}〉`) : null);
   }
@@ -136,9 +137,33 @@ export function renderDrill(store, { go, params }) {
     foot.append(h('button', { class: 'btn ghost block', onclick: () => pick(-1) }, 'わからない'));
     main.append(qc, opts, foot);
     keyHandler = e => {
-      if (!answered && '12345'.includes(e.key) && e.key) pick(Number(e.key) - 1);
+      if (!answered && '123456'.includes(e.key) && e.key) pick(Number(e.key) - 1);
       else if (answered && e.key === 'Enter') { e.preventDefault(); next(); }
     };
+  }
+  // ---- 文法（敬語の種類などを選ぶ。A・B の 2 問、A〜E から 1 つ、記述は自己採点） ----
+  function showGrammar(q) {
+    if (!q.parts && !q.labels) { showTrans({ ...q, ja: q.ja, red: q.red, answerText: q.answer_text }); return; }
+    const qc = question(q);
+    const foot = h('div', { class: 'study-foot' });
+    const groups = q.parts || [{ label: '', name: '', options: q.labels, answer: q.answer }];
+    const picked = groups.map(() => null);
+    const area = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px', padding: '0 16px' } });
+    const btnSets = groups.map((g, gi) => {
+      const bs = g.options.map((o, i) => h('button', { type: 'button', class: 'chip', 'aria-pressed': 'false', onclick: () => { picked[gi] = i; bs.forEach((b, j) => b.setAttribute('aria-pressed', String(j === i))); check.disabled = picked.some(x => x == null); } }, `${q.parts ? circled(i + 1) : ''}${o}`));
+      area.append(h('div', { class: 'field' }, g.label || g.name ? h('span', { style: { fontSize: '13px', fontWeight: 700 } }, `${g.label} ${g.name}`) : null, h('div', { class: 'chips' }, ...bs)));
+      return bs;
+    });
+    const check = h('button', { class: 'btn primary block', disabled: true, onclick: () => {
+      const ok = groups.every((g, gi) => picked[gi] + 1 === g.answer);
+      btnSets.forEach((bs, gi) => bs.forEach((b, j) => { b.disabled = true; if (j + 1 === groups[gi].answer) b.style.outline = '3px solid var(--teal)'; else if (j === picked[gi]) b.style.outline = '3px solid var(--red)'; }));
+      qc.append(answerBox(q)); if (q.answer_note) qc.append(h('span', { class: 'small muted' }, q.answer_note)); const rb = relatedBox(q); if (rb) qc.append(rb);
+      record(q, ok); clear(foot);
+      foot.append(feedback(ok, ok ? '正解！' : '正しくは ' + groups.map(g => `${g.label}${q.parts ? circled(g.answer) : ''}${g.options[g.answer - 1]}`).join('・'), ''));
+    } }, '答え合わせ');
+    foot.append(check);
+    main.append(qc, area, foot);
+    keyHandler = e => { if (e.key === 'Enter' && !check.disabled) { e.preventDefault(); check.click(); } };
   }
   // ---- 口語訳（自己採点） ----
   function showTrans(q) {
@@ -148,6 +173,7 @@ export function renderDrill(store, { go, params }) {
     const reveal = () => {
       if (revealed) return; revealed = true;
       qc.append(h('span', { class: 'small muted', style: { marginTop: '8px' } }, '赤い部分が、見出し語の訳です。'), answerBox(q));
+      if (q.answerText) qc.append(h('div', { class: 'ex kb' }, h('span', { class: 'ja', style: { fontSize: '15px', color: 'var(--ink)' } }, h('b', { style: { marginRight: '6px', color: '#8C2E3A' } }, '答'), list(q.answerText).join('／'))));
       const rb = relatedBox(q); if (rb) qc.append(rb);
       clear(foot);
       foot.append(h('div', { class: 'grid2', style: { gap: '10px' } },

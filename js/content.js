@@ -186,6 +186,18 @@ export function normalize(data) {
   return { material, cards, passages, images, extras };
 }
 
+/** 大きさで分割（Firestore の 1 文書 1MB の上限に余裕を持たせる）。挿絵がカラーで大きい教材（古文単語330）のため */
+export function chunkBySize(arr, maxBytes = 800 * 1024, maxItems = IMAGE_CHUNK) {
+  const out = []; let cur = [], size = 0;
+  for (const x of arr) {
+    const b = JSON.stringify(x).length;
+    if (cur.length && (size + b > maxBytes || cur.length >= maxItems)) { out.push(cur); cur = []; size = 0; }
+    cur.push(x); size += b;
+  }
+  if (cur.length) out.push(cur);
+  return out;
+}
+
 /** カード配列を CHUNK_SIZE ごとに分割 */
 export function chunk(arr, size = CHUNK_SIZE) {
   const out = [];

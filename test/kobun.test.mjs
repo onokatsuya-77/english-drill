@@ -1,6 +1,6 @@
 // 古文単語330: 形式の変換、出題形式（例文問題・4択・読みの読み上げ）、実戦問題の一覧
 import fs from 'node:fs'; import assert from 'node:assert/strict';
-import { normalize, chunk, detectFormat } from '../js/content.js';
+import { normalize, chunk, chunkBySize, detectFormat } from '../js/content.js';
 import { applicableModes, makeQuestion, pickMode, senseExamples, senseGloss } from '../js/quiz.js';
 import { modesFor } from '../js/model.js';
 const F = process.env.KOBUN_JSON || '/home/claude/kobun/testdata/kobun330_pilot.json';
@@ -37,10 +37,16 @@ assert.equal(pickMode(nn, 'spell', false, cards, {}, rnd), 'choice', 'つづり�
 assert.deepEqual(modesFor('kobun').map(m => m[0]), ['card', 'choice', 'sense', 'listen', 'mix']);
 assert.deepEqual(modesFor('words').map(m => m[0]), ['card', 'choice', 'spell', 'cloze', 'listen', 'mix']);
 // 実戦問題は extras に
-assert.ok(extras.length >= 17 && extras.every(x => x.kind === 'drill' && ['choice', 'trans'].includes(x.type) && x.ko && x.ja && Array.isArray(x.target)));
+const bad = extras.filter(x => !(x.kind === 'drill' && ['choice', 'trans', 'grammar'].includes(x.type) && x.ko && x.ja && Array.isArray(x.target) && x.target.length));
+assert.ok(extras.length >= 17 && !bad.length, JSON.stringify(bad.map(x => x.id)));
+assert.ok(extras.filter(x => x.type === 'choice').every(x => x.answer >= 1 && x.answer <= x.options.length));
+assert.ok(extras.filter(x => x.type === 'grammar').every(x => x.parts || x.labels || x.answer_text));
 const c1 = extras.find(x => x.set === 1 && x.n === 1);
 assert.equal(c1.options.length, 5); assert.equal(c1.answer, 2); assert.deepEqual(c1.entry_nos, [2]);
 const ch = chunk(cards); const maxBytes = Math.max(...ch.map(c => Buffer.byteLength(JSON.stringify(c))));
 console.log('kobun330 cards', cards.length, 'words', words.length, 'images', images.length, 'drills', extras.length, 'decks', material.decks.map(d => d.title).join('|'), 'max chunk KB', (maxBytes / 1024).toFixed(0));
 assert.ok(maxBytes < 900 * 1024);
+const ich = chunkBySize(images); const maxImg = Math.max(...ich.map(c => Buffer.byteLength(JSON.stringify(c))));
+console.log('image chunks', ich.length, 'max KB', (maxImg / 1024).toFixed(0)); assert.ok(maxImg < 900 * 1024);
+assert.equal(ich.flat().length, images.length);
 console.log('kobun tests passed');

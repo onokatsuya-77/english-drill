@@ -69,7 +69,8 @@ export function say(text, { lang = 'en', rate = 1 } = {}) {
 export function speakWord(card, { rate = 1 } = {}) {
   if (!canSpeak || !card) return false;
   if (card.kobun) {
-    const t = card.reading || card.front; if (!t) return false;
+    // 「え～打消」「よも～じ」のような呼応の形は、「～打消」を読まず、～ は間をあける
+    const t = String(card.reading || card.front || '').replace(/～(うちけし|打消|禁止|きんし)/g, '').replace(/～/g, '、'); if (!t) return false;
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(cleanJa(t));
     u.lang = voiceJa?.lang || 'ja-JP'; if (voiceJa) u.voice = voiceJa; u.rate = rate;

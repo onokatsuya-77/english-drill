@@ -19,7 +19,8 @@ export function playItems(cards, content = 'sentence') {
   for (const c of cards) {
     if (c.kobun) {
       // 古文: 例文の読みは無いので語だけ。「意味 → 読み（現代仮名遣い）」を日本語の声で
-      const it = { id: c.id, ja: cleanMeaning(c.meaning), en: c.reading || c.front, word: c.front, kind: 'word', lang: 'ja' };
+      const rd = String(c.reading || c.front).replace(/～(うちけし|打消|禁止|きんし)/g, '').replace(/～/g, '、');
+      const it = { id: c.id, ja: cleanMeaning(c.meaning), en: rd, word: c.front, kind: 'word', lang: 'ja' };
       if (it.ja && it.en) out.push(it);
       continue;
     }
