@@ -24,7 +24,9 @@ export const STATUS = [
   ['later', '取り掛かる前', 'まだ始めない教材です'],
 ];
 export const STATUS_NAME = Object.fromEntries(STATUS.map(([id, name]) => [id, name]));
-export const MODES = [['card', 'カード'], ['choice', '4択'], ['spell', 'つづり'], ['cloze', '穴埋め'], ['listen', 'リスニング'], ['mix', 'ミックス']];
+export const MODES = [['card', 'カード'], ['choice', '4択'], ['spell', 'つづり'], ['cloze', '穴埋め'], ['sense', '例文'], ['listen', 'リスニング'], ['mix', 'ミックス']];
+/** 教材の種類ごとに選べる出題形式（古文はつづり・穴埋めの代わりに例文問題） */
+export const modesFor = kind => MODES.filter(([id]) => (kind === 'kobun' ? !['spell', 'cloze'].includes(id) : id !== 'sense'));
 
 /** 1 枚の覚え具合: new（未学習）/ shaky（あやしい）/ known（覚えた）/ solid（定着） */
 export function masteryOf(s) {
@@ -65,7 +67,7 @@ export class Store extends EventTarget {
     this.cardIndex = new Map(); // cardId → card
     this.states = new Map(); // cardId → fsrs state
     this.days = []; this.unsubs = [];
-    this.loading = ''; this.ready = false; this.passages = new Map();
+    this.loading = ''; this.ready = false; this.passages = new Map(); this.extras = new Map(); // 教材 id → 付属データ（実戦問題など）
     this.isAdmin = false; this.denied = false;
     this.images = new Map(); // 挿絵 id → data URL
     this.imageKeys = new Set(); this.imageJobs = []; // 読み込みを始めた挿絵（教材@版）と、その読み込み
@@ -259,6 +261,13 @@ export class Store extends EventTarget {
     const p = m?.passageChunks ? await this.backend.loadChunks(materialId, 'passages', m.passageChunks, m.version) : [];
     this.passages.set(materialId, p); return p;
   }
+  /** 付属データ（古文単語330 の実戦問題など）。カードと別に、必要になったときに読む */
+  async loadExtras(materialId) {
+    if (this.extras.has(materialId)) return this.extras.get(materialId);
+    const m = this.material(materialId);
+    const x = m?.extraChunks ? await this.backend.loadChunks(materialId, 'extras', m.extraChunks, m.version) : [];
+    this.extras.set(materialId, x); return x;
+  }
   /** 教材の一覧を取り直す。版が変わった教材（登録し直した・消した教材）だけ読み込み直す */
   async refreshMaterials() {
     const before = new Map(this.materials.map(m => [m.id, m.version]));
@@ -273,7 +282,7 @@ export class Store extends EventTarget {
     for (const [id, ver] of before) {
       if (cur.get(id) === ver) continue;
       for (const c of this.cards.get(id) || []) this.cardIndex.delete(c.id);
-      this.cards.delete(id); this.passages.delete(id);
+      this.cards.delete(id); this.passages.delete(id); this.extras.delete(id);
     }
   }
 

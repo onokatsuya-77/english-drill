@@ -1,9 +1,10 @@
-// 教材 JSON（TARGET 1400/1900、速読英熟語）を共通のカード形式に変換し、Firestore 用に分割する。
+// 教材 JSON（TARGET 1400/1900、速読英熟語、鉄壁、古文単語330）を共通のカード形式に変換し、Firestore 用に分割する。
 
 export const CHUNK_SIZE = 150;
 export const IMAGE_CHUNK = 40; // 挿絵は 40 枚ずつ（1 文書 1MB の上限に余裕を持たせる）
 
-const POS_NAME = { '動': '動詞', '名': '名詞', '形': '形容詞', '副': '副詞', '前': '前置詞', '接': '接続詞', '代': '代名詞', '助': '助動詞', '間': '間投詞' };
+const POS_NAME = { '動': '動詞', '名': '名詞', '形': '形容詞', '副': '副詞', '前': '前置詞', '接': '接続詞', '代': '代名詞', '助': '助動詞', '間': '間投詞',
+  '形動': '形容動詞', '連体': '連体詞', '連語': '連語', '感動': '感動詞', '接続': '接続詞', '代名': '代名詞', '助動': '助動詞', '枕': '枕詞' };
 
 /** JSON の中身から教材の種類を判定する */
 export function detectFormat(data) {
@@ -13,6 +14,7 @@ export function detectFormat(data) {
   }
   if (data && Array.isArray(data.cards) && Array.isArray(data.lessons) && data.cards[0]?.id?.startsWith('sj-')) return 'sj';
   if (data && data.format === 'teppeki' && Array.isArray(data.entries)) return 'teppeki';
+  if (data && data.format === 'kobun330' && Array.isArray(data.entries)) return 'kobun330';
   return null;
 }
 
@@ -84,15 +86,70 @@ function relOf(r) {
   return { mark: '□', text: r.word, rank: r.rank ?? 0, pron: r.pron || '', meaning: `${r.pos ? `〔${r.pos}〕` : ''}${r.meaning || ''}${r.ref ? ` →p.${r.ref}` : ''}` };
 }
 
+// ---- 古文単語330（いいずな書店） ----
+const KB_PART_DECK = 100; // 付録のカードの deckNo の始まり（本文の区分 1〜24 のあと）
+const KB_PARTS = ['慣用表現', '敬語', '文法', '和歌', '文学史', '古文常識'];
+const kbRed = ms => (ms || []).map(m => m.red || (m.text || '').replace(/。$/, '')).filter(Boolean).join('；');
+/** 古文単語330 の 1 見出し語を共通カードに。kobun: true が付き、出題形式の判定と表示を切り替える */
+function fromKobun(e, secs) {
+  const no = String(e.no).padStart(4, '0');
+  const sec = secs[e.section] || {};
+  const il = e.illust || {};
+  return {
+    id: `kb-${no}`, m: 'kobun330', kobun: true, deck: sec.title || `第${sec.chapter || ''}章`, deckNo: e.section, no: e.no,
+    front: e.headword, pron: '', reading: e.reading || '', kanji: e.kanji || '', pos: e.pos || '', conj: e.conj || '', flags: [],
+    rank: e.stars ?? 0, group: null, summary: '',
+    meaning: kbRed(e.meanings),
+    senses: (e.meanings || []).map(m => ({ n: m.n, text: m.text, red: m.red || '' })),
+    sub: [], lines: (e.meanings || []).map(m => `${circled(m.n)}${m.text}`),
+    key: e.key || '', point: e.point || '',
+    examples: (e.examples || []).map(x => ({ en: x.ko, ja: x.ja, target: x.target || '', red: x.red || '', n: x.n ?? null, source: x.source || '', note: x.note || '', of: x.of || null })),
+    usage: [], colloc: [], derived: [],
+    related: (e.related || []).map(r => ({ mark: r.mark || '□', text: r.word, reading: r.reading || '', rank: 0, meaning: `${r.pos ? `〔${r.pos}〕` : ''}${r.meaning || ''}${r.ref ? `（→${r.ref}）` : ''}`, ref: r.ref ?? null })),
+    exam: e.exam?.note || '', drills: e.exam?.drills || [],
+    notes: [], refs: [], page: e.page || null, audio: null,
+    img: e.img || null, caption: il.caption || '', illustText: il.text || '',
+  };
+}
+/** 付録（慣用表現・敬語・文法・和歌・文学史・古文常識）の 1 項目を共通カードに。head → meaning の一問一答 */
+function fromKobunExtra(x, k) {
+  const part = x.part || '付録';
+  const deckNo = KB_PART_DECK + Math.max(0, KB_PARTS.indexOf(part));
+  const exs = (x.examples || []).map(ex => ({ en: ex.ko, ja: ex.ja, target: ex.target || '', red: ex.red || '', n: 1, source: ex.source || '', note: ex.note || '', of: null }));
+  const main = {
+    id: x.id || `kb-x${String(k + 1).padStart(4, '0')}`, m: 'kobun330', kobun: true, extra: true, part, deck: `付録 ${part}`, deckNo, no: 10000 + k * 10,
+    front: x.head, pron: '', reading: x.reading || '', kanji: '', pos: part, conj: '', flags: [], rank: 1, group: x.group || null, summary: x.subgroup || '',
+    meaning: x.meaning || '', senses: [{ n: 1, text: x.meaning || '', red: x.meaning || '' }], sub: [], lines: [],
+    key: '', point: x.note || '', examples: exs, usage: [], colloc: [], derived: [], related: [],
+    exam: '', drills: [], notes: [], refs: [], page: x.page || null, audio: null, entryNo: x.entry_no ?? null,
+    img: x.img || null, caption: x.illust?.caption || '', illustText: x.illust?.text || '',
+  };
+  const qa = (x.qa || []).filter(q => q.q && q.a).map((q, i) => ({
+    ...main, id: `${main.id}-q${i + 1}`, no: main.no + 1 + i, front: q.q, reading: '', meaning: q.a, senses: [{ n: 1, text: q.a, red: q.a }], examples: [], question: true,
+  }));
+  return [main, ...qa];
+}
+const circled = n => (n >= 1 && n <= 20 ? String.fromCharCode(0x245F + n) : n ? `${n}.` : '');
+
 /**
  * 教材 JSON を { material, cards, passages, images } に変換する。
  * material: { id, title, kind, decks:[{id,title,count}], cardCount }
  */
 export function normalize(data) {
   const fmt = detectFormat(data);
-  if (!fmt) throw new Error('教材の形式を判定できません（TARGET 1400/1900、速読英熟語、鉄壁の JSON を選んでください）');
-  let cards, material, passages = [], images = [];
-  if (fmt === 'teppeki') {
+  if (!fmt) throw new Error('教材の形式を判定できません（TARGET 1400/1900、速読英熟語、鉄壁、古文単語330 の JSON を選んでください）');
+  let cards, material, passages = [], images = [], extras = [];
+  if (fmt === 'kobun330') {
+    const secs = Object.fromEntries((data.sections || []).map(sc => [sc.no, sc]));
+    cards = data.entries.map(e => fromKobun(e, secs));
+    cards.push(...(data.extras || []).flatMap(fromKobunExtra));
+    const titles = Object.fromEntries((data.sections || []).map(sc => [sc.no, sc.title]));
+    for (const p of KB_PARTS) titles[KB_PART_DECK + KB_PARTS.indexOf(p)] = `付録 ${p}`;
+    // 入試問題（実戦問題）はカードではなく extras に入れ、実戦問題の画面で出す
+    extras = (data.drills || []).map(d => ({ ...d, kind: 'drill', id: `kb-q${String(d.set).padStart(2, '0')}-${String(d.n).padStart(2, '0')}` }));
+    material = { id: 'kobun330', title: data.title || 'Key & Point 古文単語330', kind: 'kobun', deckLabel: '区分', ranked: true, rankKind: 'stars', deckTitles: titles, extraKinds: ['drill'] };
+    images = Object.entries(data.images || {}).map(([id, src]) => ({ id, src }));
+  } else if (fmt === 'teppeki') {
     const titles = Object.fromEntries((data.sections || []).map(s => [s.no, s.title]));
     cards = data.entries.map(e => fromTeppeki(e, titles));
     material = { id: 'teppeki', title: data.title || '鉄緑会 東大英単語熟語 鉄壁', kind: 'words', deckLabel: 'SECTION', ranked: true, deckTitles: titles };
@@ -115,7 +172,8 @@ export function normalize(data) {
     let d = decks[decks.length - 1];
     if (!d || d.no !== c.deckNo) {
       const t = material.deckTitles?.[c.deckNo];
-      d = { id: `${material.id}:${c.deckNo}`, no: c.deckNo, title: t ? `${c.deck}　${t}` : c.deck, count: 0 }; decks.push(d);
+      // 古文は deck が区分名そのもの（第1章 動詞）。鉄壁は「SECTION 1　題」
+      d = { id: `${material.id}:${c.deckNo}`, no: c.deckNo, title: t && t !== c.deck ? `${c.deck}　${t}` : c.deck, count: 0 }; decks.push(d);
     }
     d.count += 1;
   }
@@ -124,7 +182,8 @@ export function normalize(data) {
   material.cardCount = cards.length;
   material.passageCount = passages.length;
   material.imageCount = images.length;
-  return { material, cards, passages, images };
+  material.extraCount = extras.length;
+  return { material, cards, passages, images, extras };
 }
 
 /** カード配列を CHUNK_SIZE ごとに分割 */

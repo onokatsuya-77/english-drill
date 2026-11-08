@@ -1,12 +1,12 @@
 // Service Worker: アプリ本体と Firebase SDK を端末に保存し、オフラインでも開けるようにする。
 // 公開するたびに VERSION を上げる。ブラウザは sw.js の中身が変わったときだけ新しい版を入れ、
 // そのときにアプリ本体をまとめて取り直す（版が同じあいだは、アプリ本体を通信で取りに行かない）。
-const VERSION = 'ed-0.4.8';
+const VERSION = 'ed-0.5.0';
 const APP_FILES = ['./', './index.html', './manifest.webmanifest', './css/app.css',
   './js/app.js', './js/config.js', './js/dom.js', './js/fsrs.js', './js/model.js', './js/content.js', './js/quiz.js', './js/matcache.js', './js/speech.js', './js/update.js',
   './js/backend-firebase.js', './js/backend-mock.js',
   './js/ui/parts.js', './js/ui/home.js', './js/ui/material.js', './js/ui/study.js', './js/ui/progress.js', './js/ui/settings.js',
-  './js/ui/admin.js', './js/ui/read.js', './js/ui/profiles.js', './js/ui/add.js', './js/ui/play.js',
+  './js/ui/admin.js', './js/ui/read.js', './js/ui/profiles.js', './js/ui/add.js', './js/ui/play.js', './js/ui/drill.js',
   './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', e => {

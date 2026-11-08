@@ -17,6 +17,12 @@ const saveLocal = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); 
 export function playItems(cards, content = 'sentence') {
   const out = [];
   for (const c of cards) {
+    if (c.kobun) {
+      // 古文: 例文の読みは無いので語だけ。「意味 → 読み（現代仮名遣い）」を日本語の声で
+      const it = { id: c.id, ja: cleanMeaning(c.meaning), en: c.reading || c.front, word: c.front, kind: 'word', lang: 'ja' };
+      if (it.ja && it.en) out.push(it);
+      continue;
+    }
     const exs = (c.examples || []).filter(x => x.en && x.ja);
     const ex = content === 'sentence' ? (exs.find(x => /[.?!]["”’]?$/.test(x.en.trim())) || exs[0]) : null;
     const it = ex ? { id: c.id, ja: ex.ja, en: ex.en, word: c.front, kind: 'sentence' }
@@ -140,7 +146,7 @@ export function renderPlay(store, { go, params }) {
       // 英語は「くり返し」の回数だけ、設定の速さで読む（どちらの向きでも）
       const sayEn = async () => {
         for (let r = 0; r < opts.repeat; r++) {
-          await say(it.en, { lang: 'en', rate: opts.rate }); if (!live()) return false;
+          await say(it.en, { lang: it.lang || 'en', rate: opts.rate }); if (!live()) return false;
           if (r < opts.repeat - 1) { await sleep(900); if (!live()) return false; }
         }
         return true;

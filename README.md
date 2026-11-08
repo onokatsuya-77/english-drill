@@ -1,6 +1,6 @@
 # English Drill
 
-忘却曲線（FSRS）に合わせて復習する英語学習アプリ。教材ごとに毎日の復習と新しい語を出し、カード・4択・つづり・穴埋め・リスニングの5つの形式で学習する。PWA として動き、ビルド不要（ES モジュール + CDN の Firebase SDK）。
+忘却曲線（FSRS）に合わせて復習する学習アプリ。教材ごとに毎日の復習と新しい語を出し、カード・4択・つづり・穴埋め・リスニングの5つの形式で学習する。英語の単語帳のほか、古文単語（古文単語330）も扱う（つづり・穴埋めの代わりに「例文の傍線部の意味を選ぶ」例文問題、読みの読み上げ、入試の実戦問題）。PWA として動き、ビルド不要（ES モジュール + CDN の Firebase SDK）。
 
 ## 画面
 - ログイン（Google）→ 学習者を選ぶ（1つのアカウントで複数の学習者）
@@ -17,19 +17,19 @@
 - 覚えた: それ以外の学習済み
 
 ## 構成
-- `js/app.js` 画面の切り替え（`#/`, `#/m/<教材>`, `#/study/<教材>/<today|deck|shaky|miss|extra>/<引数>`, `#/progress`, `#/settings`, `#/add`, `#/admin`, `#/read/<教材>/<レッスン>`, `#/profiles`）
+- `js/app.js` 画面の切り替え（`#/`, `#/m/<教材>`, `#/study/<教材>/<today|deck|shaky|miss|extra>/<引数>`, `#/progress`, `#/settings`, `#/add`, `#/admin`, `#/read/<教材>/<レッスン>`, `#/play/<教材>/<範囲>`, `#/drill/<教材>/<セット>`, `#/profiles`）
 - `js/model.js` 状態、教材ごとのキュー、覚え具合、目標、バッジ
-- `js/quiz.js` 出題形式（4択の誤答選び、例文の穴埋め、変化形、つづりの採点）
+- `js/quiz.js` 出題形式（4択の誤答選び、例文の穴埋め、変化形、つづりの採点、古文の例文問題）
 - `js/fsrs.js` FSRS-5 のスケジューラ
-- `js/content.js` 教材 JSON（TARGET 1400/1900、速読英熟語）と自分の教材（CSV・Excel）を共通カード形式に変換
+- `js/content.js` 教材 JSON（TARGET 1400/1900、速読英熟語、鉄壁、古文単語330）と自分の教材（CSV・Excel）を共通カード形式に変換。古文単語330 の付録（慣用表現・文法・和歌・文学史・古文常識・敬語）は「付録 …」の区分のカードに、実戦問題は extras に入る
 - `js/speech.js` 読み上げ（Web Speech API）
 - `js/backend-firebase.js` Firebase Auth + Firestore（オフライン永続化あり）／ `js/backend-mock.js` テストモード（`index.html?mock=1`）
-- `js/ui/*.js` 各画面、`js/ui/parts.js` リング・メダル・帯グラフなどの部品
+- `js/ui/*.js` 各画面（`drill.js` は古文の実戦問題: 5 択と口語訳の自己採点。記録は端末の localStorage）、`js/ui/parts.js` リング・メダル・帯グラフなどの部品
 - `sw.js` / `manifest.webmanifest` PWA（アプリ本体・SDK・フォントを端末に保存）
 - `firestore.rules` セキュリティルール（family() と admins() にメールアドレスを入れてコンソールに貼る）
 
 ## データ（Firestore）
-- `materials/{id}` 家族の教材、`/cards/{n}`（150枚ずつ）、`/passages/{n}` 長文
+- `materials/{id}` 家族の教材、`/cards/{n}`（150枚ずつ）、`/passages/{n}` 長文、`/images/{n}` 挿絵（40枚ずつ）、`/extras/{n}` 付属データ（実戦問題。100問ずつ）
 - `users/{uid}/materials/{id}` 自分の教材、`/cards/{n}`
 - `users/{uid}/profiles/{pid}` 学習者（設定・目標・バッジ）
 - `users/{uid}/profiles/{pid}/cards/{cardId}` カードごとの FSRS の状態と直近10回の正誤

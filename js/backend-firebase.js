@@ -76,20 +76,20 @@ export const backend = {
     if (s.docs.length >= count && !s.metadata.fromCache) putCached(key, version, out);
     return out;
   },
-  async saveMaterial(material, cardChunks, passageChunks, onProgress, imageChunks = []) {
+  async saveMaterial(material, cardChunks, passageChunks, onProgress, imageChunks = [], extraChunks = []) {
     const version = Date.now();
-    const total = cardChunks.length + passageChunks.length + imageChunks.length + 1; let done = 0;
+    const total = cardChunks.length + passageChunks.length + imageChunks.length + extraChunks.length + 1; let done = 0;
     const col = kind => collection(db, 'materials', material.id, kind);
     const pad = i => String(i).padStart(3, '0');
     // 前の版より chunk の数が減ったときだけ、余った chunk を消す（前の版を読み込み直さない）
     const prev = (await getDoc(doc(db, 'materials', material.id))).data() || {};
     const surplus = [];
-    for (const [kind, n, old] of [['cards', cardChunks.length, prev.cardChunks], ['passages', passageChunks.length, prev.passageChunks], ['images', imageChunks.length, prev.imageChunks]]) {
+    for (const [kind, n, old] of [['cards', cardChunks.length, prev.cardChunks], ['passages', passageChunks.length, prev.passageChunks], ['images', imageChunks.length, prev.imageChunks], ['extras', extraChunks.length, prev.extraChunks]]) {
       for (let i = n; i < (old || 0); i++) surplus.push(doc(col(kind), pad(i)));
     }
     if (surplus.length) { const b = writeBatch(db); surplus.forEach(r => b.delete(r)); await b.commit(); }
     // 3 つずつ並べて書き込む
-    const jobs = [...cardChunks.map((c, i) => ['cards', i, c]), ...passageChunks.map((c, i) => ['passages', i, c]), ...imageChunks.map((c, i) => ['images', i, c])];
+    const jobs = [...cardChunks.map((c, i) => ['cards', i, c]), ...passageChunks.map((c, i) => ['passages', i, c]), ...imageChunks.map((c, i) => ['images', i, c]), ...extraChunks.map((c, i) => ['extras', i, c])];
     let next = 0;
     const worker = async () => {
       while (next < jobs.length) {
@@ -99,12 +99,13 @@ export const backend = {
       }
     };
     await Promise.all([worker(), worker(), worker()]);
-    await setDoc(doc(db, 'materials', material.id), { ...material, version, cardChunks: cardChunks.length, passageChunks: passageChunks.length, imageChunks: imageChunks.length, updatedAt: serverTimestamp() });
+    await setDoc(doc(db, 'materials', material.id), { ...material, version, cardChunks: cardChunks.length, passageChunks: passageChunks.length, imageChunks: imageChunks.length, extraChunks: extraChunks.length, updatedAt: serverTimestamp() });
     // 登録した端末では、いま書いた中身をそのまま教材キャッシュに入れる（読み込み直さない）
     await Promise.all([
       putCached(`m:${material.id}:cards`, version, cardChunks.flat()),
       passageChunks.length ? putCached(`m:${material.id}:passages`, version, passageChunks.flat()) : null,
       imageChunks.length ? putCached(`m:${material.id}:images`, version, imageChunks.flat()) : null,
+      extraChunks.length ? putCached(`m:${material.id}:extras`, version, extraChunks.flat()) : null,
     ]);
     onProgress?.(1);
     return version;

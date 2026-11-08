@@ -65,6 +65,18 @@ export function say(text, { lang = 'en', rate = 1 } = {}) {
     speechSynthesis.speak(u);
   });
 }
+/** カードの語を読み上げる。古文は読み（現代仮名遣い）を日本語の声で、英語は見出し語を英語の声で */
+export function speakWord(card, { rate = 1 } = {}) {
+  if (!canSpeak || !card) return false;
+  if (card.kobun) {
+    const t = card.reading || card.front; if (!t) return false;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(cleanJa(t));
+    u.lang = voiceJa?.lang || 'ja-JP'; if (voiceJa) u.voice = voiceJa; u.rate = rate;
+    speechSynthesis.speak(u); return true;
+  }
+  return speak(card.front, { rate });
+}
 export function stopSpeaking() { if (canSpeak) { current = null; speechSynthesis.cancel(); } }
 /** 日本語の声があるか（連続再生の案内に使う） */
 export const hasJaVoice = () => !!voiceJa || (canSpeak && speechSynthesis.getVoices().some(v => /^ja[-_]/i.test(v.lang)));

@@ -300,3 +300,26 @@ details summary { cursor: pointer; padding: 8px 0; }
 .list.dark .set-row select { color: var(--nightInk); }
 .list.dark .set-row select option { color: var(--ink); }
 .done-line { min-height: 48px; padding: 0 14px; border-radius: 14px; background: var(--tealTint); color: var(--teal); display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 15px; font-weight: 700; }
+
+/* ---- 古文単語330 ---- */
+.word.kb { font-size: 40px; letter-spacing: .04em; font-family: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif; font-weight: 700; }
+.kb-sub { display: flex; gap: 12px; font-size: 15px; color: var(--ink2); }
+.rank.stars { color: #D9A520; font-size: 14px; margin-left: 8px; letter-spacing: 1px; }
+.rank.stars .dim { color: #D3D6E0; }
+.kobun-text { font-size: 20px; line-height: 1.9; margin: 8px 0 4px; font-family: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif; }
+mark.tgt { background: none; color: inherit; text-decoration: underline; text-decoration-color: var(--indigo); text-decoration-thickness: 3px; text-underline-offset: 5px; font-weight: 700; }
+mark.red { background: none; color: #C8323E; font-weight: 700; }
+.lines.kb span { display: flex; gap: 6px; font-size: 17px; line-height: 1.6; }
+.lines.kb .n { color: var(--indigoInk); flex: none; }
+.kb-key, .kb-point, .kb-exam { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: var(--bg); font-size: 14px; line-height: 1.7; }
+.kb-key b, .kb-point b, .kb-exam b { font-size: 11px; letter-spacing: .14em; color: #8C2E3A; }
+.kb-key span { font-size: 18px; font-weight: 700; }
+.kb-point p, .kb-exam p, .point { margin: 0; white-space: pre-line; }
+.ex.kb { gap: 4px; }
+.ex.kb .en { font-family: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif; font-size: 16px; line-height: 1.8; }
+.ex.kb .en .n { color: var(--indigoInk); margin-right: 4px; }
+.ex.kb .src { color: var(--muted); font-weight: 400; margin-left: 6px; }
+.ex.kb .note { font-size: 12px; color: var(--ink2); line-height: 1.6; }
+.ex.kb .kbw { font-weight: 700; } .ex.kb .kbw small { font-weight: 400; color: var(--muted); margin-left: 6px; }
+mark.head { background: none; color: inherit; font-weight: 800; }
+mark.tgt.head { font-weight: 800; }

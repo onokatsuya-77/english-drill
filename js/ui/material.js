@@ -1,5 +1,6 @@
 import { h, toast } from '../dom.js';
-import { MASTERY, MODES, STATUS } from '../model.js';
+import { MASTERY, modesFor, STATUS } from '../model.js';
+import { drillSets, drillRecord } from './drill.js';
 import { icon, coverOf, masteryBar } from './parts.js';
 
 const view = {}; // 画面を描き直しても残す選択（教材ごと）
@@ -54,7 +55,7 @@ export function renderMaterial(store, { go, params }) {
         ms.status === 'paused' ? '再開する（取組中にする）' : 'この教材を始める（取組中にする）')));
   } else {
     const minutes = Math.max(1, Math.round(((c.review + c.ahead) * 8 + c.newLeft * 25) / 60));
-    const modeChips = h('div', { class: 'chips' }, ...MODES.map(([id, name]) =>
+    const modeChips = h('div', { class: 'chips' }, ...modesFor(m.kind).map(([id, name]) =>
       h('button', { type: 'button', class: 'chip', 'aria-pressed': String(ms.mode === id), onclick: () => store.saveMatSettings(mid, { mode: id }) }, name)));
     main.append(h('section', { class: 'card' },
       h('h2', {}, '今日の学習'),
@@ -64,6 +65,7 @@ export function renderMaterial(store, { go, params }) {
         + (c.ahead ? `今日は先取りが ${c.ahead}${unit} あります。` : '')),
       h('div', { class: 'field' }, h('span', { style: { fontSize: '13px', fontWeight: 600, color: 'var(--ink2)' } }, '出題形式'), modeChips,
         h('span', { class: 'small muted', style: { lineHeight: 1.6 } }, ms.mode === 'card' ? '答えを見て、覚えていたかを自分で評価します。'
+          : ms.mode === 'sense' ? '例文の傍線部の意味を 4 択で選びます（入試の形）。例文の無い語は 4 択で出ます。'
           : (ms.newStyle === 'quiz' ? (ms.mode === 'spell' ? '初めて出る語は、見て覚えてから書きます。' : '初めて出る語も、この形式で出ます。')
             : '初めて出る語は、まずカードで覚えます。同じ回の2回目から、この形式で出ます。')
             + (ms.mode === 'spell' && m.kind === 'idioms' ? '熟語は、例文の空欄に入る語を書きます。' : ''))),
@@ -71,6 +73,27 @@ export function renderMaterial(store, { go, params }) {
         ? h('a', { class: 'btn primary block', href: `#/study/${mid}/today` }, '今日の学習を始める', icon('arrow', 20, 2.2))
         : moreButtons(store, mid, unit),
     ));
+  }
+
+  // 実戦問題（古文単語330: 入試の過去問）
+  if (m.kind === 'kobun' && m.extraCount) {
+    const sec = h('section', { class: 'card' }, h('h2', {}, '実戦問題（入試の過去問）'),
+      h('p', { class: 'muted', style: { fontSize: '14px', lineHeight: 1.7, margin: 0 } }, '各章の学習のあとに、本の実戦問題（5 択と口語訳）で確かめます。学習の記録とは別に、できた・できなかったを覚えておきます。'));
+    const list = h('div', { class: 'list', style: { margin: 0 } });
+    sec.append(list);
+    store.loadExtras(mid).then(xs => {
+      const rec = drillRecord(store, mid);
+      for (const st of drillSets(xs)) {
+        const done = st.ids.filter(id => rec[id]).length, ok = st.ids.filter(id => rec[id]?.ok).length;
+        list.append(h('a', { class: 'deck-row', href: `#/drill/${mid}/${st.set}`, style: { textDecoration: 'none', color: 'inherit' } },
+          h('div', { class: 'grow', style: { display: 'flex', flexDirection: 'column', gap: '4px' } },
+            h('span', { class: 'name' }, `実戦問題 ${circled(st.set)}`, ' ', h('small', {}, `${st.ids.length}問 · p.${st.page}`)),
+            h('span', { class: 'detail' }, done ? `できた ${ok} / ${done}（${Math.round((ok / done) * 100)}%）` : 'まだ')),
+          h('span', { class: 'btn tint sm', style: { minWidth: '56px' } }, done === st.ids.length ? 'もう一度' : done ? '続き' : '解く')));
+      }
+      if (!list.children.length) list.append(h('div', { class: 'set-row' }, h('span', { class: 'muted' }, '実戦問題はまだ登録されていません')));
+    });
+    main.append(sec);
   }
 
   // 連続再生（瞬間英作文）
@@ -85,7 +108,9 @@ export function renderMaterial(store, { go, params }) {
   }
   main.append(h('section', { class: 'card' },
     h('h2', {}, '連続再生（瞬間英作文）'),
-    h('p', { class: 'muted', style: { fontSize: '14px', lineHeight: 1.7, margin: 0 } }, '日本語 → 間 → 英語（向きを変えると 英語 → 間 → 日本語）を自動で流します。例文でも語でもできます。間のうちに答えを口に出して言う練習です。車や散歩のときに。学習の記録はつけません。'),
+    h('p', { class: 'muted', style: { fontSize: '14px', lineHeight: 1.7, margin: 0 } }, m.kind === 'kobun'
+      ? '意味 → 間 → 古語（読み）を自動で流します。間のうちに古語を口に出して言う練習です。学習の記録はつけません。'
+      : '日本語 → 間 → 英語（向きを変えると 英語 → 間 → 日本語）を自動で流します。例文でも語でもできます。間のうちに答えを口に出して言う練習です。車や散歩のときに。学習の記録はつけません。'),
     h('select', { class: 'input', 'aria-label': '流す範囲', onchange: e => { v.play = e.target.value; } },
       ...scopes.map(([id, name]) => h('option', { value: id, selected: id === v.play }, name))),
     h('button', { class: 'btn tint block', onclick: () => { const [k, a] = v.play.split(':'); go(`play/${mid}/${k}${a ? '/' + a : ''}`); } }, icon('play', 20, 2.2), '再生画面へ')));
@@ -148,9 +173,11 @@ export function renderMaterial(store, { go, params }) {
     setRow('1日の語数（最低）', ms.wordsPerDay, [10, 20, 30, 40, 50, 70, 100].map(n => [n, `${n}${unit}`]), val => store.saveMatSettings(mid, { wordsPerDay: Number(val) })),
     setRow('1日の新しい語（必ず出す数）', ms.newPerDay, [0, 5, 10, 15, 20, 30, 50].map(n => [n, `${n}${unit}`]), val => store.saveMatSettings(mid, { newPerDay: Number(val) })),
     setRow('新しい語の出し方', ms.newStyle, [['quiz', '最初から出題形式で'], ['card', 'カードで覚えてから']], val => store.saveMatSettings(mid, { newStyle: val })),
-    setRow('出題の向き', ms.direction, [['en-ja', '英語 → 日本語'], ['ja-en', '日本語 → 英語']], val => store.saveMatSettings(mid, { direction: val })),
+    m.kind === 'kobun' ? null : setRow('出題の向き', ms.direction, [['en-ja', '英語 → 日本語'], ['ja-en', '日本語 → 英語']], val => store.saveMatSettings(mid, { direction: val })),
     setRow('新しい語の順番', ms.order, [['book', '本の順'], ['random', 'ランダム']], val => store.saveMatSettings(mid, { order: val })),
-    m.ranked ? setRow('出題する重要度', ms.minRank || 0, [[0, 'すべて（難単語も）'], [1, '重要まで（＊以上）'], [2, '最重要だけ（＊＊）']], val => store.saveMatSettings(mid, { minRank: Number(val) })) : null,
+    m.ranked ? setRow('出題する重要度', ms.minRank || 0, m.rankKind === 'stars'
+      ? [[0, 'すべて'], [1, '★以上'], [2, '★★以上'], [3, '★★★だけ']]
+      : [[0, 'すべて（難単語も）'], [1, '重要まで（＊以上）'], [2, '最重要だけ（＊＊）']], val => store.saveMatSettings(mid, { minRank: Number(val) })) : null,
     h('button', { class: 'set-row', style: { color: 'var(--red)', cursor: 'pointer' }, onclick: async () => {
       if (!confirm(`「${m.title}」をホームの一覧から外しますか？（学習の記録は残ります）`)) return;
       await store.setStatus(mid, 'off'); toast('一覧から外しました'); go('');
@@ -171,6 +198,7 @@ function moreButtons(store, mid, unit) {
       '先に進めた分も、今日の記録と目標に入ります。' + (ahead ? '復習の先取りは、次の復習日が近い語から出します（今日もう出した語は出しません）。' : '')) : null);
 }
 
+const circled = n => (n >= 1 && n <= 20 ? String.fromCharCode(0x245F + n) : String(n));
 function tile(k, v, unit = '') {
   return h('div', { class: 'tile' }, h('span', { class: 'k' }, k), h('span', { class: 'v' }, String(v), unit ? h('small', {}, unit) : null));
 }

@@ -2,11 +2,11 @@ import { h, clear, toast } from '../dom.js';
 import { preview, formatInterval, Rating, State, emptyCard } from '../fsrs.js';
 import { posName } from '../content.js';
 import { pickMode, makeQuestion, checkSpelling, autoRating, cleanMeaning } from '../quiz.js';
-import { canSpeak, speak, stopSpeaking } from '../speech.js';
+import { canSpeak, speak, speakWord, stopSpeaking } from '../speech.js';
 import { icon, rings, medal, shortTitle, rankMark, illus } from './parts.js';
 
 const LEARN_WINDOW = 30 * 60000; // この時間内に再出題になるカードはセッションの中でもう一度出す
-const MODE_LABEL = { card: ['カード', 'indigo'], choice: ['4択', 'orange'], spell: ['つづり', 'indigo'], cloze: ['穴埋め', 'orange'], listen: ['リスニング', 'teal'] };
+const MODE_LABEL = { card: ['カード', 'indigo'], choice: ['4択', 'orange'], spell: ['つづり', 'indigo'], cloze: ['穴埋め', 'orange'], sense: ['例文', 'orange'], listen: ['リスニング', 'teal'] };
 const KIND_LABEL = { today: '今日の学習', deck: '練習', shaky: 'あやしい語', miss: 'よく間違える語', extra: '新しい語', ahead: '復習の先取り' };
 const EXTRA_NEW = 10, EXTRA_AHEAD = 20; // 今日の分のあとに進める数（教材ページと同じ）
 
@@ -51,7 +51,7 @@ export function renderStudy(store, { go, params }) {
     q.isNew = isNew;
     s.shownAt = Date.now();
     main.append(header(card, mode, isNew));
-    ({ card: showCard, choice: showChoice, listen: showChoice, cloze: showCloze, spell: showSpell }[q.mode] || showCard)(q);
+    ({ card: showCard, choice: showChoice, listen: showChoice, cloze: showCloze, spell: showSpell, sense: showSense }[q.mode] || showCard)(q);
   }
 
   // 自動採点の記録（4択・穴埋め・つづり・リスニング）
@@ -77,11 +77,12 @@ export function renderStudy(store, { go, params }) {
     const jaEn = dir === 'ja-en';
     const qc = h('article', { class: 'qcard', style: { flex: '1', minHeight: '0' } },
       h('div', { class: 'row-between' },
-        card.pos ? h('span', { class: 'tag' }, posName(card.pos)) : h('span'),
-        canSpeak && !jaEn ? h('button', { class: 'icon-btn', style: { background: 'var(--bg)' }, 'aria-label': '発音を聞く', onclick: () => speak(card.front) }, icon('speaker', 22)) : h('span')),
+        card.pos ? h('span', { class: 'tag' }, posTag(card)) : h('span'),
+        canSpeak && !jaEn && (!card.kobun || card.reading) ? h('button', { class: 'icon-btn', style: { background: 'var(--bg)' }, 'aria-label': card.kobun ? '読みを聞く' : '発音を聞く', onclick: () => speakWord(card) }, icon('speaker', 22)) : h('span')),
       h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
-        h('span', { class: 'word' + (jaEn ? ' ja' : card.front.length > 14 ? ' mid' : '') }, jaEn ? card.meaning : card.front, jaEn ? null : rankMark(card.rank)),
-        !jaEn && card.pron ? h('span', { class: 'pron' }, `[${card.pron}]`) : null));
+        h('span', { class: 'word' + (jaEn ? ' ja' : card.kobun ? ' kb' : card.front.length > 14 ? ' mid' : '') }, jaEn ? card.meaning : card.front, jaEn ? null : rankMark(card.rank, card.m)),
+        !jaEn && card.pron ? h('span', { class: 'pron' }, `[${card.pron}]`) : null,
+        !jaEn && card.kobun ? kobunSub(card) : null));
     const foot = h('div', { class: 'study-foot' });
     main.append(qc, foot);
     let revealed = false;
@@ -115,7 +116,7 @@ export function renderStudy(store, { go, params }) {
     const card = q.card;
     const listen = q.mode === 'listen';
     let rate = 1;
-    const play = () => speak(card.front, { rate });
+    const play = () => speakWord(card, { rate });
     let qc;
     if (listen) {
       const speedBtns = [];
@@ -128,8 +129,9 @@ export function renderStudy(store, { go, params }) {
     } else {
       qc = h('section', { class: 'qcard center' },
         h('span', { class: 'ask' }, q.jaEn ? '英語を選んでください' : '意味を選んでください'),
-        h('span', { class: 'word' + (q.jaEn ? ' ja' : q.prompt.length > 14 ? ' mid' : '') }, q.prompt),
-        !q.jaEn && card.pron ? h('span', { class: 'pron' }, `[${card.pron}]`) : null);
+        h('span', { class: 'word' + (q.jaEn ? ' ja' : card.kobun ? ' kb' : q.prompt.length > 14 ? ' mid' : '') }, q.prompt, card.kobun ? rankMark(card.rank, card.m) : null),
+        !q.jaEn && card.pron ? h('span', { class: 'pron' }, `[${card.pron}]`) : null,
+        !q.jaEn && card.kobun ? kobunSub(card) : null);
     }
     const opts = h('div', { class: 'opts' + (listen ? ' two' : ''), role: 'group', 'aria-label': '選択肢' });
     const foot = h('div', { class: 'study-foot' });
@@ -146,13 +148,45 @@ export function renderStudy(store, { go, params }) {
       const answer = q.options.find(o => o.correct).text;
       foot.append(feedback(correct,
         correct ? '正解！' : `正しくは「${answer}」`,
-        listen || q.jaEn ? `${card.front}${card.pron ? `　[${card.pron}]` : ''}　${card.meaning}` : nextText(st, correct)));
+        listen || q.jaEn ? `${card.front}${card.kanji ? `【${card.kanji}】` : ''}${card.pron ? `　[${card.pron}]` : ''}　${card.meaning}` : nextText(st, correct)));
       const im = illus(anyImg(card), store.images, 150); if (im) { im.style.maxHeight = '120px'; im.style.width = 'auto'; im.style.alignSelf = 'center'; qc.append(im); }
       if (listen) play();
     };
     foot.append(h('button', { class: 'btn ghost block', onclick: () => pick(-1) }, 'わからない'));
     main.append(qc, opts, foot);
     if (listen) setTimeout(play, 250);
+    keyHandler = e => {
+      if (!answered && '1234'.includes(e.key) && e.key) pick(Number(e.key) - 1);
+      else if (answered && e.key === 'Enter') { e.preventDefault(); next(); }
+    };
+  }
+
+  // ---- 例文問題（古文: 傍線部の意味を選ぶ） ----
+  function showSense(q) {
+    const card = q.card;
+    const tgt = h('mark', { class: 'tgt' }, q.target);
+    const qc = h('section', { class: 'qcard' },
+      h('div', { class: 'row-between' }, h('span', { class: 'ask' }, '傍線部の意味を選んでください'), card.pos ? h('span', { class: 'tag' }, posTag(card)) : null),
+      h('p', { class: 'kobun-text' }, q.before, tgt, q.after),
+      q.source ? h('span', { class: 'small muted' }, `（${q.source}）`) : null);
+    const opts = h('div', { class: 'opts', role: 'group', 'aria-label': '選択肢' });
+    const foot = h('div', { class: 'study-foot' });
+    let answered = false;
+    const buttons = q.options.map((o, i) => h('button', { type: 'button', class: 'opt', onclick: () => pick(i) }, h('span', { class: 'no' }, String(i + 1)), o.text));
+    opts.append(...buttons);
+    const pick = async i => {
+      if (answered) return; answered = true;
+      const correct = i >= 0 && q.options[i].correct;
+      buttons.forEach((b, j) => { b.disabled = true; b.classList.add(q.options[j].correct ? 'right' : j === i ? 'wrong' : 'dim'); });
+      qc.append(h('div', { class: 'ex kb' }, h('span', { class: 'ja' }, ...markRed(q.ja, q.red)), q.note ? h('span', { class: 'note' }, '＊ ' + q.note) : null),
+        h('div', { class: 'ex kb' }, h('span', { class: 'en kbw' }, card.front, card.kanji ? h('small', {}, `【${card.kanji}】`) : null), h('span', { class: 'ja' }, ...card.lines.map(l => h('span', { style: { display: 'block' } }, l)))));
+      const im = illus(anyImg(card), store.images, 150); if (im) { im.style.maxHeight = '120px'; im.style.width = 'auto'; qc.append(im); }
+      clear(foot);
+      const st = await grade(card, correct, false, 'sense');
+      foot.append(feedback(correct, correct ? '正解！' : `正しくは「${q.answer}」`, nextText(st, correct)));
+    };
+    foot.append(h('button', { class: 'btn ghost block', onclick: () => pick(-1) }, 'わからない'));
+    main.append(qc, opts, foot);
     keyHandler = e => {
       if (!answered && '1234'.includes(e.key) && e.key) pick(Number(e.key) - 1);
       else if (answered && e.key === 'Enter') { e.preventDefault(); next(); }
@@ -347,6 +381,7 @@ function rstat(v, unit, k) {
 /** カードの裏面（意味・例文・派生語など） */
 export function backOf(card, dir = 'en-ja', images = null) {
   const back = h('div', { class: 'back' });
+  if (card.kobun) return kobunBack(card, back, images);
   if (dir === 'ja-en') {
     back.append(h('span', { class: 'meaning' }, h('span', { class: 'mark' }, card.front), rankMark(card.rank)));
     if (card.pron) back.append(h('span', { class: 'pron' }, `[${card.pron}]`));
@@ -377,5 +412,66 @@ export function backOf(card, dir = 'en-ja', images = null) {
   } else if (card.derived?.length) back.append(h('div', { class: 'sect' }, h('b', {}, '派生'), ...card.derived.map(d => h('span', { style: { marginRight: '10px' } }, `${d.word} `, h('span', { class: 'muted' }, `${posName(d.pos)} ${d.meaning}`)))));
   if (card.related?.length) back.append(h('div', { class: 'sect' }, h('ul', {}, ...card.related.map(r => h('li', {}, `${r.mark} ${r.text}`, rankMark(r.rank), r.meaning ? h('span', { class: 'muted' }, ` ${r.meaning}`) : null)))));
   if (card.refs?.length) back.append(h('div', { class: 'sect muted small' }, '→ ' + card.refs.join('、')));
+  return back;
+}
+
+// ---- 古文（古文単語330）の表示 ----
+/** 品詞の札: 古文は「動詞・カ行四段」のように活用の種類も出す */
+function posTag(card) {
+  if (!card.kobun) return posName(card.pos);
+  if (card.extra) return card.pos;
+  return card.conj ? `${posName(card.pos)}・${card.conj}` : posName(card.pos);
+}
+/** 見出し語の下の行: 【漢字】と読み（見出し語と違うときだけ） */
+function kobunSub(card) {
+  const parts = [];
+  if (card.kanji) parts.push(h('span', {}, `【${card.kanji}】`));
+  if (card.reading && card.reading !== card.front) parts.push(h('span', { class: 'muted' }, `読み: ${card.reading}`));
+  return parts.length ? h('span', { class: 'kb-sub' }, ...parts) : null;
+}
+/** 訳の中の赤字を強調する。red は「・」区切りで複数あることがある */
+function markRed(text, red) {
+  const t = String(text || '');
+  const keys = String(red || '').split('・').map(x => x.trim()).filter(Boolean);
+  if (!keys.length) return [t];
+  const re = new RegExp(keys.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'g');
+  const out = []; let last = 0, m;
+  while ((m = re.exec(t))) { if (m.index > last) out.push(t.slice(last, m.index)); out.push(h('mark', { class: 'red' }, m[0])); last = m.index + m[0].length; if (!m[0]) re.lastIndex++; }
+  if (last < t.length) out.push(t.slice(last));
+  return out;
+}
+/** 古文の例文: 傍線部を強調した古文と、赤字を強調した訳 */
+function kobunExample(ex) {
+  const tgt = String(ex.target || '').split('・')[0];
+  const i = tgt ? ex.en.indexOf(tgt) : -1;
+  const en = i >= 0 ? [ex.en.slice(0, i), h('mark', { class: 'tgt' }, tgt), ex.en.slice(i + tgt.length)] : [ex.en];
+  return h('div', { class: 'ex kb' },
+    h('span', { class: 'en' }, ex.n ? h('b', { class: 'n' }, circ(ex.n)) : null, ...en, ex.source ? h('small', { class: 'src' }, `（${ex.source}）`) : null),
+    ex.ja ? h('span', { class: 'ja' }, ...markRed(ex.ja, ex.red)) : null,
+    ex.note ? h('span', { class: 'note' }, '＊ ' + ex.note) : null);
+}
+const circ = n => (n >= 1 && n <= 20 ? String.fromCharCode(0x245F + n) : '');
+/** 古文のカードの裏面: 訳語（赤字強調）・KEY・POINT・図解・例文・関連語・入試 */
+function kobunBack(card, back, images) {
+  if (card.extra) {
+    back.append(h('span', { class: 'meaning' }, h('span', { class: 'mark' }, card.meaning)));
+    if (card.group) back.append(h('span', { class: 'sum' }, card.group + (card.summary ? `　${card.summary}` : '')));
+    const pic = illus(card, images); if (pic) back.append(pic);
+    for (const ex of card.examples || []) back.append(kobunExample(ex));
+    if (card.point) back.append(h('div', { class: 'sect' }, h('b', {}, '解説'), h('p', { class: 'point' }, card.point)));
+    return back;
+  }
+  back.append(h('div', { class: 'lines kb' }, ...(card.senses || []).map(s => h('span', {}, h('b', { class: 'n' }, circ(s.n)), ...markRed(s.text, s.red)))));
+  if (card.key) back.append(h('div', { class: 'kb-key' }, h('b', {}, 'KEY'), h('span', {}, card.key)));
+  if (card.point) back.append(h('div', { class: 'kb-point' }, h('b', {}, 'POINT'), h('p', {}, card.point)));
+  const pic = illus(card, images); if (pic) { back.append(pic); if (card.caption) back.append(h('span', { class: 'small muted' }, '▶ ' + card.caption)); }
+  const own = (card.examples || []).filter(x => !x.of), rel = (card.examples || []).filter(x => x.of);
+  for (const ex of own) back.append(kobunExample(ex));
+  if (card.related?.length) {
+    back.append(h('div', { class: 'sect' }, h('b', {}, '関連語'), h('ul', {}, ...card.related.map(r => h('li', {},
+      `${r.mark} `, h('b', {}, r.text), r.reading && r.reading !== r.text ? h('span', { class: 'muted small' }, `（${r.reading}）`) : null, r.meaning ? h('span', { class: 'muted' }, ` ${r.meaning}`) : null,
+      ...rel.filter(x => x.of === r.text).map(kobunExample))))));
+  }
+  if (card.exam) back.append(h('div', { class: 'kb-exam' }, h('b', {}, '入試', rankMark(card.rank, card.m)), h('p', {}, card.exam)));
   return back;
 }

@@ -13,6 +13,7 @@ import { renderRead } from './ui/read.js';
 import { renderProfiles } from './ui/profiles.js';
 import { renderAdd } from './ui/add.js';
 import { renderPlay } from './ui/play.js';
+import { renderDrill } from './ui/drill.js';
 import { initUpdate } from './update.js';
 
 const useMock = new URLSearchParams(location.search).get('mock') === '1';
@@ -21,7 +22,7 @@ const { backend } = await import(useMock ? './backend-mock.js' : './backend-fire
 const store = new Store(backend);
 window.store = store; // デバッグ用
 
-const routes = { '': renderHome, m: renderMaterial, study: renderStudy, progress: renderProgress, settings: renderSettings, admin: renderAdmin, read: renderRead, profiles: renderProfiles, add: renderAdd, play: renderPlay };
+const routes = { '': renderHome, m: renderMaterial, study: renderStudy, progress: renderProgress, settings: renderSettings, admin: renderAdmin, read: renderRead, profiles: renderProfiles, add: renderAdd, play: renderPlay, drill: renderDrill };
 const TABS = [['', 'book', 'ホーム'], ['progress', 'rings', '記録'], ['settings', 'sliders', '設定']];
 const TAB_OF = { '': '', m: '', add: '', read: '', progress: 'progress', settings: 'settings', admin: 'settings', profiles: 'settings' };
 
@@ -44,7 +45,7 @@ function render() {
   const view = routes[path] || renderHome;
   const el = view(store, { go, isAdmin: store.isAdmin, params });
   current = el;
-  root.append(path === 'study' || path === 'play' ? el : shell(el, path));
+  root.append(path === 'study' || path === 'play' || path === 'drill' ? el : shell(el, path));
 }
 function shell(content, path) {
   const frag = document.createDocumentFragment();
@@ -72,7 +73,7 @@ function renderLogin() {
     h('figure', { style: { margin: 0, padding: '14px 14px 10px', borderRadius: '20px', background: '#fff', boxShadow: '0 1px 2px rgba(20,26,51,.06)' }, html: curve }),
     h('ul', {},
       feat('book', 'var(--indigoTint)', 'var(--indigoInk)', '教材ごとに、今日の復習と新しい語'),
-      feat('grid', 'var(--orangeTint)', 'var(--orange)', 'カード・4択・つづり・穴埋め・リスニング'),
+      feat('grid', 'var(--orangeTint)', 'var(--orange)', 'カード・4択・つづり・穴埋め・リスニング。古文も'),
       feat('phone', 'var(--tealTint)', 'var(--teal)', 'スマホでもパソコンでも、電波がなくても')),
     h('div', { style: { marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' } },
       h('button', { class: 'btn dark block', style: { height: '56px' }, onclick: () => { backend.signIn().catch(e => alert('ログインできませんでした: ' + e.message)); } }, icon('logout', 20), 'Google でログイン'),

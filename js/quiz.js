@@ -1,4 +1,4 @@
-// 出題形式（カード／4択／つづり／穴埋め／リスニング）の問題づくりと採点。
+// 出題形式（カード／4択／つづり／穴埋め／リスニング／例文問題）の問題づくりと採点。
 import { Rating } from './fsrs.js';
 
 const POSSESSIVE = /^(one's|oneself|someone|somebody|something|A|B|～|~|do|doing|to)$/i;
@@ -82,10 +82,32 @@ function distractors(card, pool, key, n = 3, rnd = Math.random) {
   return out;
 }
 
+// ---- 古文（古文単語330） ----
+/** 例文に対応する訳語（例文の番号 n → 訳語 n の赤字）。無ければ最初の訳語 */
+export function senseGloss(card, ex) {
+  const ss = card.senses || [];
+  const s = ss.find(x => x.n === ex?.n) || ss[0];
+  const g = s ? (s.red || (s.text || '').replace(/。$/, '')) : (card.meaning || '').split('；')[0];
+  return cleanMeaning(g);
+}
+/** 古文の例文問題に使える例文: 見出し語の例文（関連語の用例を除く）で、傍線部が古文の中にあり、訳語が決まるもの */
+export function senseExamples(card) {
+  if (!card.kobun) return [];
+  return (card.examples || []).filter(x => !x.of && x.target && x.en && x.en.includes(String(x.target).split('・')[0]) && senseGloss(card, x));
+}
+const firstGloss = c => cleanMeaning((c.meaning || '').split('；')[0]);
+
 /** このカードで使える出題形式 */
 export function applicableModes(card, pool, { speech = false } = {}) {
   const modes = ['card'];
   const withMeaning = pool.filter(c => c.meaning).length;
+  if (card.kobun) {
+    // 古文: つづり・穴埋めは出さない。例文問題（傍線部の意味）と、読み（現代仮名遣い）の読み上げ
+    if (card.meaning && withMeaning >= 4) modes.push('choice');
+    if (withMeaning >= 4 && senseExamples(card).length) modes.push('sense');
+    if (speech && card.meaning && withMeaning >= 4 && card.reading) modes.push('listen');
+    return modes;
+  }
   if (card.meaning && withMeaning >= 4) modes.push('choice');
   if ((isSingleWord(card.front) && card.front.length <= 24) || findInExamples(card)) modes.push('spell');
   if (pool.length >= 4 && findInExamples(card)) modes.push('cloze');
@@ -117,6 +139,20 @@ export function makeQuestion(card, mode, pool, { direction = 'en-ja' } = {}, rnd
     const key = jaEn ? (c => c.front) : (c => cleanMeaning(c.meaning));
     const opts = shuffle([card, ...distractors(card, pool, key, 3, rnd)], rnd);
     return { mode, card, prompt: jaEn ? cleanMeaning(card.meaning) : card.front, jaEn, options: opts.map(c => ({ text: key(c), correct: c.id === card.id })) };
+  }
+  if (mode === 'sense') {
+    const exs = senseExamples(card);
+    const ex = exs[Math.floor(rnd() * exs.length)];
+    const answer = senseGloss(card, ex);
+    const tgt = String(ex.target).split('・')[0];
+    const i = ex.en.indexOf(tgt);
+    // 誤答: 同じ語のほかの訳語（多義語の本来の問われ方）→ ほかの語の訳語
+    const own = (card.senses || []).map(s => cleanMeaning(s.red || (s.text || '').replace(/。$/, ''))).filter(g => g && g !== answer);
+    const others = distractors(card, pool, firstGloss, 3, rnd).map(firstGloss);
+    const seen = new Set([answer, '']); const wrong = [];
+    for (const g of [...shuffle(own, rnd), ...others]) { if (wrong.length >= 3) break; if (seen.has(g)) continue; seen.add(g); wrong.push(g); }
+    const options = shuffle([answer, ...wrong], rnd).map(t => ({ text: t, correct: t === answer }));
+    return { mode, card, before: ex.en.slice(0, i), target: tgt, after: ex.en.slice(i + tgt.length), ja: ex.ja, red: ex.red || '', source: ex.source || '', note: ex.note || '', answer, options };
   }
   if (mode === 'cloze') {
     const hit = findInExamples(card);
