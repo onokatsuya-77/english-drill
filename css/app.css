@@ -207,6 +207,8 @@ dl.defs dd { margin: 0; font-size: 12px; line-height: 1.55; color: var(--ink2); 
 .opt.wrong { border-color: var(--red); background: var(--redTint); color: var(--redDeep); font-weight: 700; }
 .opt.wrong .no { background: var(--red); color: #fff; }
 .opt.dim { border-color: var(--line); color: var(--muted); }
+.opt.picked { border-color: var(--indigo, #4B55A8); background: #EEF0FB; }
+.opt.picked .no { background: var(--indigo, #4B55A8); color: #fff; }
 .opt:disabled { cursor: default; }
 .feedback { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 14px 14px 18px; border-radius: 20px; }
 .feedback.ok { background: var(--tealTint); color: var(--tealDeep); }
@@ -323,3 +325,4 @@ mark.red { background: none; color: #C8323E; font-weight: 700; }
 .ex.kb .kbw { font-weight: 700; } .ex.kb .kbw small { font-weight: 400; color: var(--muted); margin-left: 6px; }
 mark.head { background: none; color: inherit; font-weight: 800; }
 mark.tgt.head { font-weight: 800; }
+.word.kb.mid { font-size: 30px; }

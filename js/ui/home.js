@@ -66,7 +66,7 @@ export function renderHome(store, { go }) {
 function matCard(store, m, status) {
   const c = store.counts(m.id), ms = store.mastery(m.id);
   const started = ms.studied > 0;
-  const unit = m.kind === 'idioms' ? '項目' : '語';
+  const unit = m.kind === 'idioms' || m.kind === 'kobun' ? '項目' : '語';
   let right;
   if (status === 'active') {
     right = started || c.total

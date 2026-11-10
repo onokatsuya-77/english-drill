@@ -24,7 +24,7 @@
 - `js/content.js` 教材 JSON（TARGET 1400/1900、速読英熟語、鉄壁、古文単語330）と自分の教材（CSV・Excel）を共通カード形式に変換。古文単語330 の付録（慣用表現・文法・和歌・文学史・古文常識・敬語）は「付録 …」の区分のカードに、実戦問題は extras に入る
 - `js/speech.js` 読み上げ（Web Speech API）
 - `js/backend-firebase.js` Firebase Auth + Firestore（オフライン永続化あり）／ `js/backend-mock.js` テストモード（`index.html?mock=1`）
-- `js/ui/*.js` 各画面（`drill.js` は古文の実戦問題: 5 択と口語訳の自己採点。記録は端末の localStorage）、`js/ui/parts.js` リング・メダル・帯グラフなどの部品
+- `js/ui/*.js` 各画面（`drill.js` は古文の実戦問題と付録の演習: 5 択・二つ選ぶ・並べ替え・文法・記述と口語訳の自己採点。記録は端末の localStorage）、`js/ui/parts.js` リング・メダル・帯グラフなどの部品
 - `sw.js` / `manifest.webmanifest` PWA（アプリ本体・SDK・フォントを端末に保存）
 - `firestore.rules` セキュリティルール（family() と admins() にメールアドレスを入れてコンソールに貼る）
 

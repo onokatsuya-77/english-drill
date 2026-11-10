@@ -1,6 +1,6 @@
 import { h, toast } from '../dom.js';
 import { MASTERY, modesFor, STATUS } from '../model.js';
-import { drillSets, drillRecord } from './drill.js';
+import { drillSets, drillRecord, setName } from './drill.js';
 import { icon, coverOf, masteryBar } from './parts.js';
 
 const view = {}; // 画面を描き直しても残す選択（教材ごと）
@@ -22,7 +22,7 @@ export function renderMaterial(store, { go, params }) {
   const c = store.counts(mid);
   const mm = store.mastery(mid);
   const cover = coverOf(m);
-  const unit = m.kind === 'idioms' ? '項目' : '語';
+  const unit = m.kind === 'idioms' || m.kind === 'kobun' ? '項目' : '語';
   const label = m.deckLabel || 'Section';
   const decks = m.decks || [];
 
@@ -35,7 +35,7 @@ export function renderMaterial(store, { go, params }) {
       h('div', { class: 'row-between', style: { alignItems: 'flex-start' } },
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px' } },
           h('h1', {}, m.title),
-          h('span', { class: 'meta' }, `${label} ${decks[0]?.no ?? 1}〜${decks[decks.length - 1]?.no ?? 1} · ${m.cardCount}${unit}`)),
+          h('span', { class: 'meta' }, heroMeta(m, decks, label, unit))),
         h('span', { class: 'badge', style: { color: cover.color } }, m.own ? '自作' : '家族で共有')),
       h('div', { class: 'meter', role: 'img', 'aria-label': `${mm.total}${unit}のうち${mm.learned}${unit}を習得` },
         h('div', { style: { width: `${mm.total ? (mm.learned / mm.total) * 100 : 0}%` } })),
@@ -85,9 +85,9 @@ export function renderMaterial(store, { go, params }) {
       const rec = drillRecord(store, mid);
       for (const st of drillSets(xs)) {
         const done = st.ids.filter(id => rec[id]).length, ok = st.ids.filter(id => rec[id]?.ok).length;
-        list.append(h('a', { class: 'deck-row', href: `#/drill/${mid}/${st.set}`, style: { textDecoration: 'none', color: 'inherit' } },
+        list.append(h('a', { class: 'deck-row', href: `#/drill/${mid}/${encodeURIComponent(st.set)}`, style: { textDecoration: 'none', color: 'inherit' } },
           h('div', { class: 'grow', style: { display: 'flex', flexDirection: 'column', gap: '4px' } },
-            h('span', { class: 'name' }, `実戦問題 ${circled(st.set)}`, ' ', h('small', {}, `${st.ids.length}問 · p.${st.page}`)),
+            h('span', { class: 'name' }, setName(st.set), ' ', h('small', {}, `${st.ids.length}問 · p.${st.page}`)),
             h('span', { class: 'detail' }, done ? `できた ${ok} / ${done}（${Math.round((ok / done) * 100)}%）` : 'まだ')),
           h('span', { class: 'btn tint sm', style: { minWidth: '56px' } }, done === st.ids.length ? 'もう一度' : done ? '続き' : '解く')));
       }
@@ -152,8 +152,10 @@ export function renderMaterial(store, { go, params }) {
     const x = byNo.get(d.no) || { total: d.count, new: d.count, shaky: 0, known: 0, solid: 0 };
     const parts = [`定着 ${x.solid}`, `覚えた ${x.known}`, `あやしい ${x.shaky}`];
     if (x.new) parts.push(`未学習 ${x.new}`);
-    const nos = (store.cards.get(mid) || []).filter(cc => cc.deckNo === d.no).map(cc => cc.no);
-    const range = nos.length ? `${Math.min(...nos)}〜${Math.max(...nos)}` : '';
+    const dc = (store.cards.get(mid) || []).filter(cc => cc.deckNo === d.no);
+    // 古文の付録は見出し語の番号が無いので、本のページで示す
+    const nos = dc.map(cc => (cc.extra ? cc.page : cc.no)).filter(n => n != null);
+    const range = nos.length ? `${dc[0]?.extra ? 'p.' : ''}${Math.min(...nos)}〜${Math.max(...nos)}` : '';
     list.append(h('div', { class: 'deck-row' },
       h('div', { class: 'grow', style: { display: 'flex', flexDirection: 'column', gap: '7px' } },
         h('div', { class: 'row-between', style: { alignItems: 'baseline' } },
@@ -212,4 +214,15 @@ function setRow(label, value, options, onchange) {
     h('label', { for: id }, label),
     h('select', { id, onchange: e => onchange(e.target.value) },
       ...options.map(([val, text]) => h('option', { value: String(val), selected: String(val) === String(value) }, text))));
+}
+
+/** 教材ページの上の 1 行。古文は本文の区分（1〜23）と付録（区分 100〜）を分けて数える */
+function heroMeta(m, decks, label, unit) {
+  const range = ds => `${ds[0]?.no ?? 1}〜${ds[ds.length - 1]?.no ?? 1}`;
+  if (m.kind === 'kobun') {
+    const words = decks.filter(d => d.no < 100), appx = decks.filter(d => d.no >= 100);
+    const sum = ds => ds.reduce((a, d) => a + (d.count || 0), 0);
+    if (appx.length) return `${label} ${range(words)}＋付録 · ${sum(words)}語・付録 ${sum(appx)}項目`;
+  }
+  return `${label} ${range(decks)} · ${m.cardCount}${unit}`;
 }

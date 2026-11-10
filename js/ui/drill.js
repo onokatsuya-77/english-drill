@@ -3,7 +3,18 @@ import { h, clear } from '../dom.js';
 import { icon, shortTitle } from './parts.js';
 
 const circled = n => (n >= 1 && n <= 20 ? String.fromCharCode(0x245F + n) : String(n));
+/** セットの名前: 実戦問題 ①／付録 文法の演習 */
+export const setName = s => (typeof s === 'number' ? `実戦問題 ${circled(s)}` : `付録 ${s}の演習`);
 const list = v => (v == null || v === '' ? [] : Array.isArray(v) ? v : [v]);
+/** 問の種類の札 */
+const kindLabel = q => (q.type === 'order' ? '並べ替え' : q.type === 'choice' ? (Array.isArray(q.answer) ? `${q.answer.length}つ選ぶ` : `${(q.options || []).length}択`) : q.type === 'grammar' ? (q.ko ? '文法' : '記述') : '口語訳');
+/** おわりの画面の「できなかった問」の 1 行 */
+function missText(x) {
+  const ans = x.type === 'order' ? (x.answer || []).map(a => x.options[a - 1]).join('→')
+    : x.type === 'choice' ? list(x.answer).map(a => x.options[a - 1]).join('・') : list(x.red).join('・') || list(x.answer_text).join('・');
+  const t = list(x.target).join('／') || String(x.q || '').slice(0, 24) + (String(x.q || '').length > 24 ? '…' : '');
+  return `${t}　→　${ans}`;
+}
 
 /** 付属データからセットごとの一覧（set, page, ids, items）を作る */
 export function drillSets(extras) {
@@ -14,7 +25,9 @@ export function drillSets(extras) {
     s.items.push(x); s.ids.push(x.id); if (x.page < s.page) s.page = x.page;
     by.set(x.set, s);
   }
-  return [...by.values()].sort((a, b) => a.set - b.set).map(s => ({ ...s, items: s.items.sort((a, b) => a.n - b.n), ids: s.items.sort((a, b) => a.n - b.n).map(x => x.id) }));
+  // 実戦問題 ①〜⑬（数）が先、付録の演習（「文法」「和歌」などの名前）はあと
+  const ord = s => (typeof s.set === 'number' ? [0, s.set] : [1, s.page || 0]);
+  return [...by.values()].sort((a, b) => { const x = ord(a), y = ord(b); return x[0] - y[0] || x[1] - y[1]; }).map(s => ({ ...s, items: s.items.sort((a, b) => a.n - b.n), ids: s.items.sort((a, b) => a.n - b.n).map(x => x.id) }));
 }
 const recKey = (store, mid) => `ed-drill:${store.profile?.id || 'x'}:${mid}`;
 /** できた・できなかったの記録（問 id → { ok, at }） */
@@ -55,7 +68,7 @@ function markKo(ko, targets, heads) {
 /** 実戦問題の画面: #/drill/<教材>/<セット> */
 export function renderDrill(store, { go, params }) {
   const [mid, setStr] = params;
-  const set = Number(setStr);
+  const set = /^\d+$/.test(setStr) ? Number(setStr) : setStr;   // 付録の演習は「文法」のような名前
   const m = store.material(mid);
   const main = h('main', { class: 'study bare' });
   main.sticky = true;
@@ -82,14 +95,14 @@ export function renderDrill(store, { go, params }) {
         h('div', { class: 'bar', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': String(s.items.length), 'aria-valuenow': String(n) },
           h('div', { style: { width: `${(s.idx / s.items.length) * 100}%` } })),
         h('span', { class: 'count' }, `${n} / ${s.items.length}`)),
-      h('div', { class: 'info' }, h('span', { class: `pill ${q.type === 'choice' ? 'orange' : q.type === 'grammar' ? 'teal' : 'indigo'}` }, q.type === 'choice' ? `${(q.options || []).length}択` : q.type === 'grammar' ? '文法' : '口語訳'), h('span', {}, `${shortTitle(m.title)} · 実戦問題 ${circled(set)} · 問 ${q.n}`)));
+      h('div', { class: 'info' }, h('span', { class: `pill ${q.type === 'choice' ? 'orange' : q.type === 'trans' ? 'indigo' : 'teal'}` }, kindLabel(q)), h('span', {}, `${shortTitle(m.title)} · ${setName(set)} · 問 ${q.n}`)));
   }
   function show() {
     clear(main);
     const q = s.items[s.idx];
     if (!q) { finish(); return; }
     main.append(header(q));
-    (q.type === 'choice' ? showChoice : q.type === 'grammar' ? showGrammar : showTrans)(q);
+    (q.type === 'order' ? showOrder : q.type === 'choice' ? (Array.isArray(q.answer) ? showMulti : showChoice) : q.type === 'grammar' ? showGrammar : showTrans)(q);
   }
   function record(q, ok) {
     s.rec[q.id] = { ok, at: Date.now() }; saveRecord(store, mid, s.rec);
@@ -107,14 +120,23 @@ export function renderDrill(store, { go, params }) {
       ...cs.map(c => h('div', { class: 'ex kb', style: { marginTop: '6px' } }, h('span', { class: 'en kbw' }, c.front, c.kanji ? h('small', {}, `【${c.kanji}】`) : null, h('small', {}, ` ${c.no}`)), h('span', { class: 'ja' }, c.meaning))));
   }
   function question(q) {
-    const ask = q.type === 'choice' ? '傍線部の口語訳として適当なものを選んでください' : q.type === 'grammar' ? (q.q || '敬語・文法の問題') : '傍線部を口語訳してください（太字が本書の見出し語）';
+    const ask = q.q || (q.type === 'choice' ? '傍線部の口語訳として適当なものを選んでください' : q.type === 'grammar' ? '敬語・文法の問題' : '傍線部を口語訳してください（太字が本書の見出し語）');
     return h('section', { class: 'qcard' },
+      q.group_note ? h('span', { class: 'small muted' }, q.group_note) : null,
       h('span', { class: 'ask' }, ask),
-      h('p', { class: 'kobun-text' }, ...markKo(q.ko, q.target, q.head)),
+      // 文学史などの知識問題には本文（古文）が無い
+      q.ko ? h('p', { class: 'kobun-text' }, ...markKo(q.ko, q.target, q.head)) : null,
       q.source ? h('span', { class: 'small muted' }, `〈${q.source}〉`) : null);
   }
   function answerBox(q) {
+    if (!q.ja) return null;
     return h('div', { class: 'ex kb' }, h('span', { class: 'ja', style: { fontSize: '15px', color: 'var(--ink)' } }, h('b', { style: { marginRight: '6px', color: '#8C2E3A' } }, '訳'), ...markRed(q.ja, q.red)));
+  }
+  /** 答え合わせのあとに出すもの（訳、答えの注、見出し語） */
+  function after(qc, q) {
+    const ab = answerBox(q); if (ab) qc.append(ab);
+    if (q.answer_note) qc.append(h('span', { class: 'small muted' }, q.answer_note));
+    const rb = relatedBox(q); if (rb) qc.append(rb);
   }
 
   // ---- 5 択 ----
@@ -129,7 +151,7 @@ export function renderDrill(store, { go, params }) {
       if (answered) return; answered = true;
       const correct = i + 1 === q.answer;
       buttons.forEach((b, j) => { b.disabled = true; b.classList.add(j + 1 === q.answer ? 'right' : j === i ? 'wrong' : 'dim'); });
-      qc.append(answerBox(q)); const rb = relatedBox(q); if (rb) qc.append(rb);
+      after(qc, q);
       record(q, correct);
       clear(foot);
       foot.append(feedback(correct, correct ? '正解！' : `正しくは ${circled(q.answer)}「${q.options[q.answer - 1]}」`, ''));
@@ -140,6 +162,51 @@ export function renderDrill(store, { go, params }) {
       if (!answered && '123456'.includes(e.key) && e.key) pick(Number(e.key) - 1);
       else if (answered && e.key === 'Enter') { e.preventDefault(); next(); }
     };
+  }
+  // ---- いくつか選ぶ（「二つ選べ」） ----
+  function showMulti(q) {
+    const want = q.answer.length;
+    const qc = question(q);
+    const foot = h('div', { class: 'study-foot' });
+    const sel = new Set();
+    const opts = h('div', { class: 'opts', role: 'group', 'aria-label': '選択肢' });
+    const buttons = (q.options || []).map((o, i) => h('button', { type: 'button', class: 'opt', 'aria-pressed': 'false', onclick: () => {
+      if (sel.has(i)) sel.delete(i); else if (sel.size < want) sel.add(i);
+      buttons.forEach((b, j) => { b.setAttribute('aria-pressed', String(sel.has(j))); b.classList.toggle('picked', sel.has(j)); });
+      check.disabled = sel.size !== want;
+    } }, h('span', { class: 'no' }, circled(i + 1)), o));
+    opts.append(...buttons);
+    const check = h('button', { class: 'btn primary block', disabled: true, onclick: () => {
+      const ok = q.answer.every(a => sel.has(a - 1));
+      buttons.forEach((b, j) => { b.disabled = true; b.classList.remove('picked'); b.classList.add(q.answer.includes(j + 1) ? 'right' : sel.has(j) ? 'wrong' : 'dim'); });
+      after(qc, q); record(q, ok); clear(foot);
+      foot.append(feedback(ok, ok ? '正解！' : '正しくは ' + q.answer.map(a => `${circled(a)}「${q.options[a - 1]}」`).join('・'), ''));
+    } }, `${want}つ選んで答え合わせ`);
+    foot.append(check);
+    main.append(qc, opts, foot);
+    keyHandler = e => { if (e.key === 'Enter' && !check.disabled) { e.preventDefault(); check.click(); } };
+  }
+  // ---- 並べ替え（成立の古い順など）: 押した順に番号が付く ----
+  function showOrder(q) {
+    const qc = question(q);
+    const foot = h('div', { class: 'study-foot' });
+    const seq = [];
+    const opts = h('div', { class: 'opts', role: 'group', 'aria-label': '選択肢' });
+    const buttons = (q.options || []).map((o, i) => h('button', { type: 'button', class: 'opt', onclick: () => {
+      const k = seq.indexOf(i); if (k >= 0) seq.splice(k); else seq.push(i);
+      buttons.forEach((b, j) => { const p = seq.indexOf(j); b.querySelector('.no').textContent = p >= 0 ? String(p + 1) : '・'; b.classList.toggle('picked', p >= 0); });
+      check.disabled = seq.length !== q.options.length;
+    } }, h('span', { class: 'no' }, '・'), o));
+    opts.append(...buttons);
+    const check = h('button', { class: 'btn primary block', disabled: true, onclick: () => {
+      const ok = q.answer.every((a, k) => seq[k] === a - 1);
+      buttons.forEach(b => { b.disabled = true; });
+      after(qc, q); record(q, ok); clear(foot);
+      foot.append(feedback(ok, ok ? '正解！' : '正しくは ' + q.answer.map(a => q.options[a - 1]).join(' → '), ''));
+    } }, '答え合わせ');
+    foot.append(h('span', { class: 'small muted center' }, '古い順など、問の順に押してください（押し直すとそこから取り消し）'), check);
+    main.append(qc, opts, foot);
+    keyHandler = e => { if (e.key === 'Enter' && !check.disabled) { e.preventDefault(); check.click(); } };
   }
   // ---- 文法（敬語の種類などを選ぶ。A・B の 2 問、A〜E から 1 つ、記述は自己採点） ----
   function showGrammar(q) {
@@ -157,7 +224,7 @@ export function renderDrill(store, { go, params }) {
     const check = h('button', { class: 'btn primary block', disabled: true, onclick: () => {
       const ok = groups.every((g, gi) => picked[gi] + 1 === g.answer);
       btnSets.forEach((bs, gi) => bs.forEach((b, j) => { b.disabled = true; if (j + 1 === groups[gi].answer) b.style.outline = '3px solid var(--teal)'; else if (j === picked[gi]) b.style.outline = '3px solid var(--red)'; }));
-      qc.append(answerBox(q)); if (q.answer_note) qc.append(h('span', { class: 'small muted' }, q.answer_note)); const rb = relatedBox(q); if (rb) qc.append(rb);
+      after(qc, q);
       record(q, ok); clear(foot);
       foot.append(feedback(ok, ok ? '正解！' : '正しくは ' + groups.map(g => `${g.label}${q.parts ? circled(g.answer) : ''}${g.options[g.answer - 1]}`).join('・'), ''));
     } }, '答え合わせ');
@@ -172,7 +239,8 @@ export function renderDrill(store, { go, params }) {
     let revealed = false;
     const reveal = () => {
       if (revealed) return; revealed = true;
-      qc.append(h('span', { class: 'small muted', style: { marginTop: '8px' } }, '赤い部分が、見出し語の訳です。'), answerBox(q));
+      if (q.ja && q.red) qc.append(h('span', { class: 'small muted', style: { marginTop: '8px' } }, '赤い部分が、見出し語の訳です。'));
+      const ab = answerBox(q); if (ab) qc.append(ab);
       if (q.answerText) qc.append(h('div', { class: 'ex kb' }, h('span', { class: 'ja', style: { fontSize: '15px', color: 'var(--ink)' } }, h('b', { style: { marginRight: '6px', color: '#8C2E3A' } }, '答'), list(q.answerText).join('／'))));
       const rb = relatedBox(q); if (rb) qc.append(rb);
       clear(foot);
@@ -181,7 +249,7 @@ export function renderDrill(store, { go, params }) {
         h('button', { class: 'btn primary', onclick: () => rate(true) }, 'できた')));
     };
     const rate = ok => { record(q, ok); next(); };
-    foot.append(h('button', { class: 'btn dark block', style: { height: '60px', fontSize: '17px' }, onclick: reveal }, '訳を見る'));
+    foot.append(h('button', { class: 'btn dark block', style: { height: '60px', fontSize: '17px' }, onclick: reveal }, q.ja ? '訳を見る' : '答えを見る'));
     main.append(qc, foot);
     keyHandler = e => {
       if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); if (!revealed) reveal(); }
@@ -203,13 +271,13 @@ export function renderDrill(store, { go, params }) {
       h('header', { style: { display: 'flex', justifyContent: 'flex-end', padding: '14px 12px 0' } },
         h('a', { class: 'icon-btn', href: `#/m/${mid}`, 'aria-label': '閉じる', style: { color: '#fff' } }, icon('close', 22, 2.2))),
       h('section', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', padding: '20px 24px 0', textAlign: 'center' } },
-        h('h1', { style: { fontSize: '24px', fontWeight: 800 } }, `実戦問題 ${circled(set)} おわり`),
+        h('h1', { style: { fontSize: '24px', fontWeight: 800 } }, `${setName(set)} おわり`),
         h('span', { style: { fontSize: '40px', fontWeight: 800 } }, `${ok}`, h('small', { style: { fontSize: '18px', fontWeight: 600, color: 'var(--nightInk)' } }, ` / ${all} 問`)),
         h('span', { style: { fontSize: '14px', color: 'var(--nightInk)' } }, ok === all ? '全問できました！' : 'できなかった問は、見出し語の学習で確かめましょう。')));
     if (miss.length) {
       main.append(h('div', { class: 'box', style: { paddingBottom: '6px' } },
         h('h2', { style: { margin: '0 0 6px', fontSize: '14px', fontWeight: 700, color: 'var(--nightInk)' } }, 'できなかった問'),
-        ...miss.map(x => h('div', { class: 'miss' }, h('b', {}, `問 ${x.n}`), h('span', {}, list(x.target).join('／') + '　→　' + list(x.red).join('・'))))));
+        ...miss.map(x => h('div', { class: 'miss' }, h('b', {}, `問 ${x.n}`), h('span', {}, missText(x))))));
     }
     const line = { border: '2px solid #3A4370', color: '#fff', background: 'transparent' };
     main.append(h('div', { style: { marginTop: 'auto', padding: '22px 16px 30px', display: 'flex', flexDirection: 'column', gap: '10px' } },

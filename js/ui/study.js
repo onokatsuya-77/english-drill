@@ -80,7 +80,7 @@ export function renderStudy(store, { go, params }) {
         card.pos ? h('span', { class: 'tag' }, posTag(card)) : h('span'),
         canSpeak && !jaEn && (!card.kobun || card.reading) ? h('button', { class: 'icon-btn', style: { background: 'var(--bg)' }, 'aria-label': card.kobun ? '読みを聞く' : '発音を聞く', onclick: () => speakWord(card) }, icon('speaker', 22)) : h('span')),
       h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
-        h('span', { class: 'word' + (jaEn ? ' ja' : card.kobun ? ' kb' : card.front.length > 14 ? ' mid' : '') }, jaEn ? card.meaning : card.front, jaEn ? null : rankMark(card.rank, card.m)),
+        h('span', { class: 'word' + (jaEn ? ' ja' : card.kobun ? kbCls(card.front) : card.front.length > 14 ? ' mid' : '') }, jaEn ? card.meaning : card.front, jaEn || card.extra ? null : rankMark(card.rank, card.m)),
         !jaEn && card.pron ? h('span', { class: 'pron' }, `[${card.pron}]`) : null,
         !jaEn && card.kobun ? kobunSub(card) : null));
     const foot = h('div', { class: 'study-foot' });
@@ -129,7 +129,7 @@ export function renderStudy(store, { go, params }) {
     } else {
       qc = h('section', { class: 'qcard center' },
         h('span', { class: 'ask' }, q.jaEn ? '英語を選んでください' : '意味を選んでください'),
-        h('span', { class: 'word' + (q.jaEn ? ' ja' : card.kobun ? ' kb' : q.prompt.length > 14 ? ' mid' : '') }, q.prompt, card.kobun ? rankMark(card.rank, card.m) : null),
+        h('span', { class: 'word' + (q.jaEn ? ' ja' : card.kobun ? kbCls(q.prompt) : q.prompt.length > 14 ? ' mid' : '') }, q.prompt, card.kobun && !card.extra ? rankMark(card.rank, card.m) : null),
         !q.jaEn && card.pron ? h('span', { class: 'pron' }, `[${card.pron}]`) : null,
         !q.jaEn && card.kobun ? kobunSub(card) : null);
     }
@@ -416,6 +416,8 @@ export function backOf(card, dir = 'en-ja', images = null) {
 }
 
 // ---- 古文（古文単語330）の表示 ----
+/** 古文の見出しの文字の大きさ: 短い古語は大きな明朝、付録の長い問いは小さめ */
+const kbCls = t => (String(t || '').length > 12 ? ' ja' : String(t || '').length > 7 ? ' kb mid' : ' kb');
 /** 品詞の札: 古文は「動詞・カ行四段」のように活用の種類も出す */
 function posTag(card) {
   if (!card.kobun) return posName(card.pos);
@@ -457,7 +459,9 @@ function kobunBack(card, back, images) {
   if (card.extra) {
     back.append(h('span', { class: 'meaning' }, h('span', { class: 'mark' }, card.meaning)));
     if (card.group) back.append(h('span', { class: 'sum' }, card.group + (card.summary ? `　${card.summary}` : '')));
-    const pic = illus(card, images); if (pic) back.append(pic);
+    // 付録の図（地図・内裏の図など）は字が小さいので大きめに。2 枚目の図があればそれも
+    for (const img of [card.img, card.img2]) { const pic = img && illus({ img, front: card.front }, images, 520); if (pic) { pic.style.width = '100%'; back.append(pic); } }
+    if (card.img && card.caption) back.append(h('span', { class: 'small muted' }, '▶ ' + card.caption));
     for (const ex of card.examples || []) back.append(kobunExample(ex));
     if (card.point) back.append(h('div', { class: 'sect' }, h('b', {}, '解説'), h('p', { class: 'point' }, card.point)));
     return back;

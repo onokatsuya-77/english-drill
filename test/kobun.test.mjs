@@ -37,12 +37,26 @@ assert.equal(pickMode(nn, 'spell', false, cards, {}, rnd), 'choice', 'つづり�
 assert.deepEqual(modesFor('kobun').map(m => m[0]), ['card', 'choice', 'sense', 'listen', 'mix']);
 assert.deepEqual(modesFor('words').map(m => m[0]), ['card', 'choice', 'spell', 'cloze', 'listen', 'mix']);
 // 実戦問題は extras に
-const bad = extras.filter(x => !(x.kind === 'drill' && ['choice', 'trans', 'grammar'].includes(x.type) && x.ko && x.ja && Array.isArray(x.target) && x.target.length));
+// 実戦問題（数のセット）は古文・訳・傍線部がそろう。付録の演習（「文学史」などの名前のセット）は問題文だけのものもある
+const bad = extras.filter(x => !(x.kind === 'drill' && ['choice', 'trans', 'grammar', 'order'].includes(x.type) && (x.ko || x.q) &&
+  (typeof x.set === 'string' || (x.ko && x.ja && Array.isArray(x.target) && x.target.length))));
 assert.ok(extras.length >= 17 && !bad.length, JSON.stringify(bad.map(x => x.id)));
-assert.ok(extras.filter(x => x.type === 'choice').every(x => x.answer >= 1 && x.answer <= x.options.length));
+const inRange = (a, x) => Number.isInteger(a) && a >= 1 && a <= x.options.length;
+assert.ok(extras.filter(x => x.type === 'choice' || x.type === 'order').every(x => [].concat(x.answer).every(a => inRange(a, x))));
+assert.ok(extras.filter(x => x.type === 'order').every(x => [...x.answer].sort((a, b) => a - b).join() === x.options.map((_, i) => i + 1).join()));
+assert.equal(new Set(extras.map(x => x.id)).size, extras.length, '問の id が重ならない');
 assert.ok(extras.filter(x => x.type === 'grammar').every(x => x.parts || x.labels || x.answer_text));
 const c1 = extras.find(x => x.set === 1 && x.n === 1);
 assert.equal(c1.options.length, 5); assert.equal(c1.answer, 2); assert.deepEqual(c1.entry_nos, [2]);
+// 付録（慣用表現・敬語・文法・和歌・文学史・古文常識）は一問一答のカードに
+const appx = cards.filter(c => c.extra);
+if (data.extras?.length) {
+  assert.ok(appx.every(c => c.front && c.meaning && c.deckNo >= 100), '付録のカードに見出しと意味がある');
+  assert.equal(new Set(cards.map(c => c.id)).size, cards.length, 'カードの id が重ならない');
+  assert.ok(appx.filter(c => c.img).every(c => images.some(x => x.id === c.img)), '付録の図がある');
+  assert.ok(appx.filter(c => c.img2).every(c => images.some(x => x.id === c.img2)), '2 枚目の図がある');
+  console.log('appendix cards', appx.length, 'qa', appx.filter(c => c.question).length, 'with figure', appx.filter(c => c.img).length);
+}
 const ch = chunk(cards); const maxBytes = Math.max(...ch.map(c => Buffer.byteLength(JSON.stringify(c))));
 console.log('kobun330 cards', cards.length, 'words', words.length, 'images', images.length, 'drills', extras.length, 'decks', material.decks.map(d => d.title).join('|'), 'max chunk KB', (maxBytes / 1024).toFixed(0));
 assert.ok(maxBytes < 900 * 1024);

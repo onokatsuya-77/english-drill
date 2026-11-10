@@ -122,12 +122,13 @@ function fromKobunExtra(x, k) {
     meaning: x.meaning || '', senses: [{ n: 1, text: x.meaning || '', red: x.meaning || '' }], sub: [], lines: [],
     key: '', point: x.note || '', examples: exs, usage: [], colloc: [], derived: [], related: [],
     exam: '', drills: [], notes: [], refs: [], page: x.page || null, audio: null, entryNo: x.entry_no ?? null,
-    img: x.img || null, caption: x.illust?.caption || '', illustText: x.illust?.text || '',
+    img: x.img || null, img2: x.img2 || null, caption: x.illust?.caption || '', illustText: x.illust?.text || '',
   };
   const qa = (x.qa || []).filter(q => q.q && q.a).map((q, i) => ({
     ...main, id: `${main.id}-q${i + 1}`, no: main.no + 1 + i, front: q.q, reading: '', meaning: q.a, senses: [{ n: 1, text: q.a, red: q.a }], examples: [], question: true,
   }));
-  return [main, ...qa];
+  // 見出しと意味のそろった項目だけをカードにする（一問一答だけの項目もある）
+  return [...(x.head && x.meaning ? [main] : []), ...qa];
 }
 const circled = n => (n >= 1 && n <= 20 ? String.fromCharCode(0x245F + n) : n ? `${n}.` : '');
 
